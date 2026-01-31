@@ -15,7 +15,21 @@ import { FlaskConical } from "lucide-react";
 
 export function MockModeBanner() {
   const { mockMode, user, toggleMockMode, setMockRole } = useAuth();
-  if (!mockMode) return null;
+  // When mock mode is off, show a slim bar so user can turn it back on
+  if (!mockMode) {
+    return (
+      <div className="bg-slate-700 text-slate-200 py-1.5 px-4 text-sm flex items-center justify-between gap-4 flex-wrap">
+        <span className="text-slate-400 text-xs">Mock mode is off (using live API)</span>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="mock-toggle-off" className="text-slate-400 text-xs cursor-pointer">
+            Turn mock mode back on
+          </Label>
+          <Switch id="mock-toggle-off" checked={false} onCheckedChange={toggleMockMode} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-slate-800 text-slate-100 py-1.5 px-4 text-sm flex items-center justify-between gap-4 flex-wrap">
       <div className="flex items-center gap-3">
