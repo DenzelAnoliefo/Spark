@@ -244,3 +244,11 @@ export function getClinics(useMock) {
   if (useMock) return Promise.resolve(mockClinics);
   return fetchWithAuth("/clinics");
 }
+
+export async function createPatient(data, useMock) {
+  if (useMock) {
+    // Hackathon Logic: Just pretend it worked
+    return Promise.resolve({ id: `p-${Date.now()}`, full_name: data.full_name });
+  }
+  return fetchWithAuth("/patients", { method: "POST", body: JSON.stringify(data) });
+}
