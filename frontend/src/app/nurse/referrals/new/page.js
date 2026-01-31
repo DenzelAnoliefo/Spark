@@ -3,13 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
-import { createReferral, getPatients } from "@/lib/api";
+import { getPatients, createReferral } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -17,18 +16,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { SPECIALTIES, PRIORITIES } from "@/lib/mockData";
+import { Loader2, Plus } from "lucide-react";
+import { SPECIALTIES } from "@/lib/mockData";
+// IMPORT THE NEW SHEET
+import { AddPatientSheet } from "@/components/nurse/add-patient-sheet";
 
-export default function CreateReferralPage() {
+export default function NewReferralPage() {
   const router = useRouter();
   const { mockMode } = useAuth();
+  const [loading, setLoading] = useState(false);
   const [patients, setPatients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
+  
+  // Sheet State
+  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
+
+  const [formData, setFormData] = useState({
     patient_id: "",
     specialty: "",
     priority: "Medium",
@@ -38,150 +42,164 @@ export default function CreateReferralPage() {
   });
 
   useEffect(() => {
-    getPatients(mockMode).then(setPatients).finally(() => setLoading(false));
+    getPatients(mockMode).then(setPatients).catch(console.error);
   }, [mockMode]);
+
+  // THE MAGIC FUNCTION: Runs when "Register Patient" finishes
+  const handlePatientCreated = (newPatient) => {
+    // 1. Add new patient to list
+    setPatients(prev => [...prev, newPatient]);
+    // 2. Auto-select them in the dropdown
+    setFormData(prev => ({ ...prev, patient_id: newPatient.id }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.patient_id || !form.specialty) {
-      toast.error("Please select patient and specialty");
-      return;
-    }
-    setSubmitting(true);
+    setLoading(true);
     try {
-      await createReferral(form, mockMode);
-      toast.success("Referral created");
+      await createReferral(formData, mockMode);
+      toast.success("Referral created successfully");
       router.push("/nurse");
     } catch (err) {
-      toast.error(err.message || "Failed to create referral");
+      toast.error("Failed to create referral");
+      console.error(err);
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  if (loading) return null;
-
   return (
-    <div className="max-w-2xl mx-auto">
-      <Link href="/nurse" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6">
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to Dashboard
-      </Link>
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">New Referral</h1>
+        <p className="text-muted-foreground mt-1">Create a new specialist referral</p>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Create Referral</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Submit a new referral for specialist care
-          </p>
+          <CardTitle>Referral Details</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <Label htmlFor="patient">Patient</Label>
-              <Select
-                value={form.patient_id}
-                onValueChange={(v) => setForm((f) => ({ ...f, patient_id: v }))}
-                required
-              >
-                <SelectTrigger className="mt-2">
-                  <SelectValue placeholder="Select patient" />
-                </SelectTrigger>
-                <SelectContent>
-                  {patients.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            
+            {/* PATIENT SELECTOR + QUICK ADD BUTTON */}
+            <div className="space-y-2">
+              <Label>Patient</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={formData.patient_id}
+                  onValueChange={(v) => setFormData({ ...formData, patient_id: v })}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select patient..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {patients.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {/* THE NEW BUTTON */}
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsAddPatientOpen(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New
+                </Button>
+              </div>
             </div>
 
-            <div>
-              <Label htmlFor="specialty">Specialty</Label>
-              <Select
-                value={form.specialty}
-                onValueChange={(v) => setForm((f) => ({ ...f, specialty: v }))}
-                required
-              >
-                <SelectTrigger className="mt-2">
-                  <SelectValue placeholder="Select specialty" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SPECIALTIES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Specialty</Label>
+                <Select
+                  value={formData.specialty}
+                  onValueChange={(v) => setFormData({ ...formData, specialty: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select specialty" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SPECIALTIES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <Select
+                  value={formData.priority}
+                  onValueChange={(v) => setFormData({ ...formData, priority: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Low">Low</SelectItem>
+                    <SelectItem value="Medium">Medium</SelectItem>
+                    <SelectItem value="High">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div>
-              <Label htmlFor="priority">Priority</Label>
-              <Select
-                value={form.priority}
-                onValueChange={(v) => setForm((f) => ({ ...f, priority: v }))}
-              >
-                <SelectTrigger className="mt-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRIORITIES.map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="notes">Notes (reason for referral)</Label>
-              <Textarea
-                id="notes"
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                placeholder="Clinical notes..."
-                className="mt-2"
-                rows={4}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="due_date">Follow-up by (Due date)</Label>
+            <div className="space-y-2">
+              <Label>Target Date (Optional)</Label>
               <Input
-                id="due_date"
                 type="date"
-                value={form.due_date}
-                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
-                className="mt-2"
+                value={formData.due_date}
+                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center space-x-2 border p-4 rounded-md">
               <Switch
                 id="transport"
-                checked={form.transportation_needed}
-                onCheckedChange={(v) =>
-                  setForm((f) => ({ ...f, transportation_needed: v }))
-                }
+                checked={formData.transportation_needed}
+                onCheckedChange={(c) => setFormData({ ...formData, transportation_needed: c })}
               />
-              <Label htmlFor="transport">Transportation needed</Label>
+              <Label htmlFor="transport">Patient requires transportation assistance</Label>
             </div>
 
-            <div className="flex gap-3">
-              <Button type="submit" disabled={submitting}>
-                {submitting ? "Creating..." : "Create Referral"}
+            <div className="space-y-2">
+              <Label>Clinical Notes</Label>
+              <Textarea
+                placeholder="Reason for referral, symptoms, history..."
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="min-h-[100px]"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => router.back()}>
+                Cancel
               </Button>
-              <Link href="/nurse">
-                <Button type="button" variant="outline">
-                  Cancel
-                </Button>
-              </Link>
+              <Button type="submit" disabled={loading || !formData.patient_id || !formData.specialty}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create Referral
+              </Button>
             </div>
           </form>
         </CardContent>
       </Card>
+
+      {/* THE SHEET COMPONENT */}
+      <AddPatientSheet 
+        open={isAddPatientOpen} 
+        onOpenChange={setIsAddPatientOpen}
+        onSuccess={handlePatientCreated}
+        mockMode={mockMode}
+      />
     </div>
   );
 }
