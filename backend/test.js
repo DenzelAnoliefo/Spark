@@ -31,6 +31,3 @@ rl.question("Enter patient's email: ", (email) => {
     });
   });
 });
-
-// Run the demo
-// runDemo();
