@@ -57,7 +57,7 @@ export async function getForecast({ lat, lon }) {
     }
 
     return {
-        daily: daily.slice(0, 5),
+        daily: daily.slice(0, 7),
         hourlyByDate,
     };
 }
