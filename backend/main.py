@@ -5,6 +5,7 @@ from sqlmodel import Session, select, SQLModel, Field
 from database import get_session, engine 
 from typing import Optional, List
 from datetime import datetime, date
+from sqlalchemy import Column, JSON
 
 # 1. Initialize the API App
 app = FastAPI()
@@ -118,3 +119,44 @@ def create_referral(referral_data: ReferralCreate, session: Session = Depends(ge
     session.commit()
     session.refresh(new_ref)
     return new_ref
+
+# Spark/backend/main.py
+
+class PatientCreate(SQLModel):
+    full_name: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    medical_history: List[str] = [] # e.g. ["Cardiac"]
+
+@app.post("/patients")
+def create_patient(patient_data: PatientCreate, session: Session = Depends(get_session)):
+    # 1. Calculate Initial Risk Score
+    score = 10 # Base score
+    if "Cardiac" in patient_data.medical_history:
+        score += 50
+    if "Diabetic" in patient_data.medical_history:
+        score += 20
+        
+    # 2. Save to DB
+    new_patient = Patient(
+        full_name=patient_data.full_name,
+        phone=patient_data.phone,
+        email=patient_data.email,
+        address=patient_data.address,
+        medical_history=patient_data.medical_history, # Ensure your DB supports JSON or Arrays
+        risk_score=score
+    )
+    session.add(new_patient)
+    session.commit()
+    session.refresh(new_patient)
+    return new_patient
+
+class Patient(SQLModel, table=True):
+    __tablename__ = "patients"
+    id: Optional[str] = Field(default=None, primary_key=True)
+    full_name: str
+    risk_score: int = 0
+    # Add these so you can actually store the data
+    phone: Optional[str] = None
+    medical_history: List[str] = Field(default=[], sa_column=Column(JSON))
