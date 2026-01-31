@@ -1,5 +1,8 @@
 import os
+from dotenv import load_dotenv
 from sqlmodel import create_engine, Session
+
+load_dotenv()
 
 # 1. Supabase connection string — set in .env, never commit real credentials
 # format: postgresql://postgres:[PASSWORD]@host:5432/postgres
