@@ -1,4 +1,6 @@
 import { notifyUser } from "./notify.js";
+import { getWeather } from "./weather.js";
+
 
 /**
  * Send a notification to a patient
@@ -21,7 +23,13 @@ export async function sendNotification({ email, phone, message }) {
  */
 export async function sendAppointmentReminder(patient) {
   const { email, phone, name, date } = patient;
-  const message = `Hello ${name}, this is a reminder for your appointment on ${date}.`;
+
+  if (!date) {
+    console.warn("No appointment date provided for weather forecast");
+  }
+
+  const weatherMessage = await getWeather(date);
+  const message = `Hello ${name}, this is a reminder for your appointment on ${date}.\n${weatherMessage}`;
   await sendNotification({ email, phone, message });
 }
 
@@ -30,6 +38,7 @@ export async function sendAppointmentReminder(patient) {
  */
 export async function sendMissedAppointmentAlert(patient) {
   const { email, phone, name, date } = patient;
-  const message = `Hello ${name}, it looks like you missed your appointment on ${date}. Please reschedule.`;
+  const weatherMessage = await getWeather(date);
+  const message = `Hello ${name}, it looks like you missed your appointment on ${date}. Please reschedule.\n`;
   await sendNotification({ email, phone, message });
 }

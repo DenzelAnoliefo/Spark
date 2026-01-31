@@ -1,0 +1,10 @@
+{
+  "name": "notifications-demo",
+  "type": "module",
+  "version": "1.0.0",
+  "dependencies": {
+    "nodemailer": "^6.9.8",
+    "twilio": "^4.21.0",
+    "dotenv": "^16.4.5"
+  }
+}

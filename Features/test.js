@@ -2,7 +2,6 @@ import "dotenv/config";
 import readline from "readline";
 import { sendAppointmentReminder, sendMissedAppointmentAlert } from "./notificationServices/notificationService.js";
 
-
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
