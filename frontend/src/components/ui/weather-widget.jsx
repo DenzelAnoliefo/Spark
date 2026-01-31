@@ -172,7 +172,7 @@ export default function WeatherWidget({
                         Hourly
                     </div>
 
-                    <div className="max-h-72 overflow-y-auto px-3 py-2 space-y-2">
+                    <div className="max-h-110 overflow-y-auto px-3 py-2 space-y-2">
                         {selectedHours.length === 0 ? (
                         <div className="text-xs text-muted-foreground">
                             No hourly data.
