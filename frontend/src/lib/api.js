@@ -9,18 +9,35 @@ import {
   mockClinics,
 } from "./mockData";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { supabase } from "./supabase"; // Import your initialized client
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 async function fetchWithAuth(path, options = {}) {
-  const token = typeof window !== "undefined" && localStorage.getItem("supabase_access_token");
+  // 1. Get the current active session from Supabase
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  // 2. Attach the token to the header
   const headers = {
     "Content-Type": "application/json",
     ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
   };
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    
+    // 3. Handle Errors
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || `API error: ${res.status}`);
+    }
+    return res.json();
+  } catch (error) {
+    // Optional: Log error or re-throw
+    throw error;
+  }
 }
 
 // --- MOCK IMPLEMENTATIONS ---

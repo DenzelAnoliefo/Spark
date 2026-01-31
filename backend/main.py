@@ -67,3 +67,54 @@ def get_dashboard(session: Session = Depends(get_session)):
         
     # Sort: Risk Score (Desc) -> Priority (High>Low)
     return sorted(dashboard_data, key=lambda x: x['risk_score'], reverse=True)
+
+# 1. Match the Frontend's "getReferrals" call
+@app.get("/referrals")
+def get_referrals(session: Session = Depends(get_session)):
+    # Reuse the dashboard logic, just mapped to the correct URL
+    return get_dashboard(session)
+
+# 2. Match the Frontend's "updateReferralStatus" call
+@app.patch("/referrals/{ref_id}/status")
+def update_status(ref_id: str, status_update: dict, session: Session = Depends(get_session)):
+    # Get the referral
+    referral = session.get(Referral, ref_id)
+    if not referral:
+        raise HTTPException(status_code=404, detail="Referral not found")
+        
+    # Update status
+    new_status = status_update.get("status")
+    referral.status = new_status
+    
+    # SAFETY NET LOGIC (The "Winning Feature")
+    if new_status == "NO_SHOW" or new_status == "MISSED":
+        referral.is_urgent = True
+        # TODO: This is where you call your NotificationService
+        
+    session.add(referral)
+    session.commit()
+    return {"ok": True, "status": new_status}
+
+# 3. Match the Frontend's "createReferral" call
+class ReferralCreate(SQLModel):
+    patient_id: str
+    specialty: str
+    priority: str
+    notes: Optional[str] = None
+    transportation_needed: bool = False
+
+@app.post("/referrals")
+def create_referral(referral_data: ReferralCreate, session: Session = Depends(get_session)):
+    # Create the DB Object
+    new_ref = Referral(
+        patient_id=referral_data.patient_id,
+        specialty=referral_data.specialty,
+        priority=referral_data.priority,
+        status="CREATED",
+        is_urgent=False,
+        requires_transport=referral_data.transportation_needed
+    )
+    session.add(new_ref)
+    session.commit()
+    session.refresh(new_ref)
+    return new_ref
