@@ -39,6 +39,7 @@ export default function NewReferralPage() {
     notes: "",
     due_date: "",
     transportation_needed: false,
+    is_urgent: false,
   });
 
   useEffect(() => {
@@ -161,13 +162,23 @@ export default function NewReferralPage() {
               />
             </div>
 
-            <div className="flex items-center space-x-2 border p-4 rounded-md">
-              <Switch
-                id="transport"
-                checked={formData.transportation_needed}
-                onCheckedChange={(c) => setFormData({ ...formData, transportation_needed: c })}
-              />
-              <Label htmlFor="transport">Patient requires transportation assistance</Label>
+            <div className="flex flex-col gap-2 border p-4 rounded-md space-y-2">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="urgent"
+                  checked={formData.is_urgent}
+                  onCheckedChange={(c) => setFormData({ ...formData, is_urgent: c })}
+                />
+                <Label htmlFor="urgent">Urgent referral</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="transport"
+                  checked={formData.transportation_needed}
+                  onCheckedChange={(c) => setFormData({ ...formData, transportation_needed: c })}
+                />
+                <Label htmlFor="transport">Patient requires transportation assistance</Label>
+              </div>
             </div>
 
             <div className="space-y-2">

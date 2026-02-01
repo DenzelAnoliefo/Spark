@@ -7,6 +7,8 @@ import {
   getReferrals,
   getTasks,
   getClinics,
+  updateTask,
+  loadDemoData,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +31,8 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { PriorityBadge } from "@/components/shared/priority-badge";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
-import { Plus, FileText, AlertTriangle } from "lucide-react";
+import { Plus, FileText, AlertTriangle, Database } from "lucide-react";
+import { toast } from "sonner";
 import { REFERRAL_STATUSES, SPECIALTIES } from "@/lib/mockData";
 
 export default function NurseDashboard() {
@@ -46,27 +49,48 @@ export default function NurseDashboard() {
   });
   const [clinic, setClinic] = useState("");
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const [refs, t, c] = await Promise.all([
-          getReferrals("all", mockMode),
-          getTasks("open", mockMode),
-          getClinics(mockMode),
-        ]);
-        setReferrals(refs);
-        setTasks(t);
-        setClinics(c);
-        if (c?.length && !clinic) setClinic(c[0]?.id || "");
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [refs, t, c] = await Promise.all([
+        getReferrals("all", mockMode),
+        getTasks("open", mockMode),
+        getClinics(mockMode),
+      ]);
+      setReferrals(refs);
+      setTasks(t);
+      setClinics(c);
+      if (c?.length && !clinic) setClinic(c[0]?.id || "");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-    load();
+  };
+
+  useEffect(() => {
+    loadData();
   }, [mockMode]);
+
+  const handleMarkTaskDone = async (taskId) => {
+    try {
+      await updateTask(taskId, { status: "DONE" }, mockMode);
+      const t = await getTasks("open", mockMode);
+      setTasks(t);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleLoadDemoData = async () => {
+    try {
+      const res = await loadDemoData(mockMode);
+      toast.success(res?.message ?? "Demo data loaded");
+      await loadData();
+    } catch (err) {
+      toast.error(err.message ?? "Failed to load demo data");
+    }
+  };
 
   const filtered = referrals.filter((r) => {
     if (filters.status !== "all" && r.status !== filters.status) return false;
@@ -121,6 +145,12 @@ export default function NurseDashboard() {
                 ))}
               </SelectContent>
             </Select>
+          )}
+          {!mockMode && (
+            <Button variant="outline" size="sm" onClick={handleLoadDemoData}>
+              <Database className="h-4 w-4 mr-2" />
+              Load demo data
+            </Button>
           )}
           <Link href="/nurse/referrals/new">
             <Button>
@@ -306,14 +336,21 @@ export default function NurseDashboard() {
             ) : (
               <ul className="space-y-3">
                 {tasks.map((t) => (
-                  <li key={t.id} className="border-b pb-3 last:border-0">
-                    <Link href={`/nurse/referrals/${t.referral_id}`} className="block">
+                  <li key={t.id} className="border-b pb-3 last:border-0 flex items-start justify-between gap-2">
+                    <Link href={`/nurse/referrals/${t.referral_id}`} className="block flex-1 min-w-0">
                       <p className="font-medium text-sm">{t.patient_name}</p>
                       <p className="text-xs text-muted-foreground">{t.specialty} — {t.type}</p>
                       <p className="text-xs text-amber-600 mt-1">
-                        Due {new Date(t.due_at).toLocaleDateString()}
+                        Due {t.due_at ? new Date(t.due_at).toLocaleDateString() : "—"}
                       </p>
                     </Link>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleMarkTaskDone(t.id)}
+                    >
+                      Mark done
+                    </Button>
                   </li>
                 ))}
               </ul>

@@ -27,8 +27,7 @@ class Patient(SQLModel, table=True):
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
-    # Stores ["Cardiac", "Diabetic"] as a JSON array in Postgres
-    medical_history: List[str] = Field(default=[], sa_column=Column(JSON))
+    medical_history: List[str] = Field(default_factory=list, sa_column=Column(JSON))
 
 class Referral(SQLModel, table=True):
     __tablename__ = "referrals"
