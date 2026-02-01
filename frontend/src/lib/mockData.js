@@ -16,6 +16,24 @@ export const SPECIALTIES = [
   "Neurology",
 ];
 
+/** Demo nurses for "acting as" (real mode, no auth) */
+export const DEMO_NURSES = [
+  { id: "00000000-0000-0000-0000-000000000001", name: "Nurse Avery Chen" },
+  { id: "00000000-0000-0000-0000-000000000002", name: "Nurse Jordan Patel" },
+];
+
+/** One specialist per specialty for assignment + acting-as */
+export const SPECIALIST_BY_SPECIALTY = {
+  Cardiology: "Dr. Omar Haddad",
+  Dermatology: "Dr. Maya Singh",
+  Orthopedics: "Dr. Lily Nguyen",
+  "Mental Health": "Dr. Priya Shah",
+  Ophthalmology: "Dr. James Wu",
+  Pulmonology: "Dr. Sofia Reyes",
+  Gastroenterology: "Dr. David Kim",
+  Neurology: "Dr. Rachel Green",
+};
+
 export const PRIORITIES = ["High", "Medium", "Low"];
 
 export const mockPatients = [

@@ -19,13 +19,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Loader2, Plus } from "lucide-react";
-import { SPECIALTIES } from "@/lib/mockData";
+import { SPECIALTIES, SPECIALIST_BY_SPECIALTY } from "@/lib/mockData";
 // IMPORT THE NEW SHEET
 import { AddPatientSheet } from "@/components/nurse/add-patient-sheet";
 
 export default function NewReferralPage() {
   const router = useRouter();
-  const { mockMode } = useAuth();
+  const { mockMode, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [patients, setPatients] = useState([]);
   
@@ -58,7 +58,16 @@ export default function NewReferralPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await createReferral(formData, mockMode);
+      const payload = { ...formData };
+      if (!mockMode && formData.specialty) {
+        payload.specialist_key = formData.specialty;
+        payload.specialist_name = SPECIALIST_BY_SPECIALTY[formData.specialty] ?? null;
+        payload.specialist_specialty = formData.specialty;
+      }
+      await createReferral(payload, mockMode, {
+        createdByUserId: user?.id,
+        createdByUserName: user?.full_name,
+      });
       toast.success("Referral created successfully");
       router.push("/nurse");
     } catch (err) {
@@ -98,6 +107,7 @@ export default function NewReferralPage() {
                     {patients.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.full_name}
+                        {p.email ? ` — ${p.email}` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

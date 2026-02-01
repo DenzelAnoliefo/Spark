@@ -250,6 +250,18 @@ export default function PatientPage() {
                     <p className="text-sm text-muted-foreground">{ref.notes}</p>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {(ref.timelinePreview || []).length > 0 && (
+                      <div className="rounded-md border bg-slate-50/50 px-3 py-2">
+                        <p className="text-xs font-medium text-slate-600 mb-1">History</p>
+                        <ul className="space-y-1 text-xs text-muted-foreground">
+                          {(ref.timelinePreview || []).slice(0, 3).map((e) => (
+                            <li key={e.id}>
+                              {new Date(e.timestamp).toLocaleString()} — {e.description || e.type}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     {apt && (
                       <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
                         <Calendar className="h-5 w-5 text-teal-600 shrink-0 mt-0.5" />

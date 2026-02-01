@@ -77,10 +77,10 @@ export async function getMe(useMock) {
 export async function getPatients(useMock) {
   if (useMock) {
     const { mockPatients } = await import("./mockData");
-    return Promise.resolve(mockPatients.map((p) => ({ id: p.id, full_name: p.full_name })));
+    return Promise.resolve(mockPatients.map((p) => ({ id: p.id, full_name: p.full_name, email: p.email ?? null })));
   }
   const list = await getPatientsSupabase();
-  return list.map((p) => ({ id: p.id, full_name: p.full_name }));
+  return list.map((p) => ({ id: p.id, full_name: p.full_name, email: p.email ?? null }));
 }
 
 /** context = { role, userId } for scope 'mine' (e.g. from useAuth().user) */
@@ -101,7 +101,8 @@ export async function getReferrals(scope = "all", useMock, context = {}) {
   if (scope === "mine" && context.role === "patient" && !context.userId) {
     return Promise.resolve([]);
   }
-  return getReferralsSupabase(scope, context.role, context.userId);
+  const specialistKey = context.role === "specialist" ? (context.specialistKey ?? context.userId) : null;
+  return getReferralsSupabase(scope, context.role, context.userId, specialistKey);
 }
 
 export async function getReferral(id, useMock) {
@@ -111,7 +112,7 @@ export async function getReferral(id, useMock) {
     const timeline = mockTimelineEvents[id] || [];
     return Promise.resolve({ ...ref, timeline });
   }
-  const refs = await getReferralsSupabase("all", null, null);
+  const refs = await getReferralsSupabase("all", null, null, null);
   const ref = refs.find((r) => r.id === id);
   if (!ref) throw new Error("Not found");
   const { data: events } = await supabase
@@ -122,7 +123,8 @@ export async function getReferral(id, useMock) {
   return { ...ref, timeline: events || [] };
 }
 
-export async function createReferral(data, useMock) {
+/** options: { createdByUserId, createdByUserName } for real mode (nurse acting-as) */
+export async function createReferral(data, useMock, options = {}) {
   if (useMock) {
     const patient = mockPatients.find((p) => p.id === data.patient_id);
     const newRef = {
@@ -143,14 +145,16 @@ export async function createReferral(data, useMock) {
     mockReferrals.push(newRef);
     return Promise.resolve(newRef);
   }
-  const createdBy = await getCurrentUserId();
+  const createdByUserId = options.createdByUserId ?? (await getCurrentUserId());
+  const createdByUserName = options.createdByUserName ?? null;
   const patientName =
     data.patient_name ??
     (await getPatientsSupabase()).find((p) => p.id === data.patient_id)?.full_name ??
     "Unknown";
   return createReferralSupabase(
     { ...data, patient_name: patientName },
-    createdBy
+    createdByUserId,
+    createdByUserName
   );
 }
 
@@ -168,7 +172,8 @@ export async function updateReferralStatus(id, status, useMock) {
   });
 }
 
-export async function createAppointment(referralId, data, useMock) {
+/** options: { specialistName } for timeline description */
+export async function createAppointment(referralId, data, useMock, options = {}) {
   if (useMock) {
     const ref = mockReferrals.find((r) => r.id === referralId);
     if (!ref) return Promise.reject(new Error("Not found"));
@@ -185,14 +190,15 @@ export async function createAppointment(referralId, data, useMock) {
     ref.updated_at = new Date().toISOString();
     return Promise.resolve(apt);
   }
-  const refs = await getReferralsSupabase("all", null, null);
+  const refs = await getReferralsSupabase("all", null, null, null);
   const ref = refs.find((r) => r.id === referralId);
   if (!ref) throw new Error("Referral not found");
   return setAppointmentSupabase(
     referralId,
     ref.patient_id,
     data.scheduled_for,
-    data.location
+    data.location,
+    options.specialistName
   );
 }
 

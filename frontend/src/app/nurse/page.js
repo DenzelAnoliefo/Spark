@@ -290,32 +290,49 @@ export default function NurseDashboard() {
                       <TableHead>Priority</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Due</TableHead>
+                      <TableHead>History</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell className="font-medium">{r.patient_name}</TableCell>
-                        <TableCell>{r.specialty}</TableCell>
-                        <TableCell>
-                          <PriorityBadge priority={r.priority} />
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={r.status} />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {r.due_date ? new Date(r.due_date).toLocaleDateString() : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Link href={`/nurse/referrals/${r.id}`}>
-                            <Button variant="ghost" size="sm">
-                              <FileText className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filtered.map((r) => {
+                      const preview = (r.timelinePreview || []).slice(0, 3);
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell className="font-medium">{r.patient_name}</TableCell>
+                          <TableCell>{r.specialty}</TableCell>
+                          <TableCell>
+                            <PriorityBadge priority={r.priority} />
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={r.status} />
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {r.due_date ? new Date(r.due_date).toLocaleDateString() : "—"}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-[180px]">
+                            {preview.length === 0 ? (
+                              "—"
+                            ) : (
+                              <ul className="space-y-0.5">
+                                {preview.map((e) => (
+                                  <li key={e.id} title={e.description || e.type}>
+                                    {new Date(e.timestamp).toLocaleDateString()} — {e.type?.replace(/_/g, " ")}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Link href={`/nurse/referrals/${r.id}`}>
+                              <Button variant="ghost" size="sm">
+                                <FileText className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}

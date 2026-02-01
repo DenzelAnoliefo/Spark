@@ -12,12 +12,15 @@ import { Loader2 } from "lucide-react";
 
 export function AddPatientSheet({ open, onOpenChange, onSuccess, mockMode }) {
   const [loading, setLoading] = useState(false);
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
   const [formData, setFormData] = useState({
     full_name: "",
     phone: "",
     email: "",
     history: []
   });
+  const [emailError, setEmailError] = useState("");
 
   const toggleHistory = (condition) => {
     setFormData(prev => {
@@ -33,23 +36,24 @@ export function AddPatientSheet({ open, onOpenChange, onSuccess, mockMode }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setEmailError("");
+    const email = (formData.email || "").trim();
+    if (email && !EMAIL_REGEX.test(email)) {
+      setEmailError("Please enter a valid email address");
+      return;
+    }
     setLoading(true);
     try {
-      // 1. Send to Backend
       const newPatient = await createPatient({
         full_name: formData.full_name,
         phone: formData.phone,
-        email: formData.email,
+        email: email || null,
         medical_history: formData.history
       }, mockMode);
 
       toast.success("Patient registered successfully");
-      
-      // 2. Pass data back to parent to auto-select
       onSuccess(newPatient);
       onOpenChange(false);
-      
-      // 3. Reset Form
       setFormData({ full_name: "", phone: "", email: "", history: [] });
     } catch (err) {
       toast.error("Failed to register patient");
@@ -86,6 +90,20 @@ export function AddPatientSheet({ open, onOpenChange, onSuccess, mockMode }) {
               value={formData.phone}
               onChange={e => setFormData({...formData, phone: e.target.value})}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Email</Label>
+            <Input 
+              type="email"
+              placeholder="patient@example.com"
+              value={formData.email}
+              onChange={e => {
+                setFormData({...formData, email: e.target.value});
+                setEmailError("");
+              }}
+            />
+            {emailError && <p className="text-sm text-destructive">{emailError}</p>}
           </div>
 
           <div className="space-y-2">

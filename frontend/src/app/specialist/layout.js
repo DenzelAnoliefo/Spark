@@ -7,11 +7,19 @@ import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { MockModeBanner } from "@/components/shared/mock-mode-banner";
 import { OfflineBanner } from "@/components/shared/offline-banner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Stethoscope, LogOut } from "lucide-react";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
+import { SPECIALTIES, SPECIALIST_BY_SPECIALTY } from "@/lib/mockData";
 
 export default function SpecialistLayout({ children }) {
-  const { user, loading, offline, signOut } = useAuth();
+  const { user, loading, offline, signOut, mockMode, setSelectedSpecialist } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -41,7 +49,31 @@ export default function SpecialistLayout({ children }) {
               Closed-Loop Referrals
             </Link>
             <nav className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">{user?.full_name}</span>
+              {!mockMode && SPECIALTIES?.length > 0 ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground shrink-0">Acting as Specialist:</span>
+                  <Select
+                    value={user?.id || user?.specialty || SPECIALTIES[0]}
+                    onValueChange={(key) => {
+                      const name = SPECIALIST_BY_SPECIALTY[key];
+                      if (key) setSelectedSpecialist(key, name || "", key);
+                    }}
+                  >
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue placeholder="Select specialist" />
+                    </SelectTrigger>
+                  <SelectContent>
+                    {SPECIALTIES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {SPECIALIST_BY_SPECIALTY[s] || s} ({s})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                </div>
+              ) : (
+                <span className="text-sm text-muted-foreground">{user?.full_name}</span>
+              )}
               <Button variant="ghost" size="sm" onClick={() => { signOut(); router.push("/login"); }}>
                 <LogOut className="h-4 w-4" />
               </Button>
