@@ -1,11 +1,17 @@
 # macOS
 .DS_Store
 
-# env
+# env (ignore all env files everywhere)
 .env
-frontend/.env
-frontend/.env.local
-frontend/.env.*.local
+.env.local
+.env.* 
+.env.*.local
+
+# allow committed example(s)
+!.env.example
+!frontend/.env.example
+!backend/.env.example
+
 
 # dependencies
 node_modules/
@@ -24,3 +30,12 @@ pnpm-debug.log*
 # optional: editor stuff
 .vscode/
 .idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
