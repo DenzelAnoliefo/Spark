@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
-import { getReferrals, createAppointment, updateAppointment, rescheduleAppointment } from "@/lib/api";
+import { getReferrals, createAppointment, updateAppointment, rescheduleAppointment, triggerNoShowEmail } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -34,17 +34,29 @@ export default function SpecialistPage() {
 
   const handleAppointmentUpdate = async (referralId, aptId, data) => {
     try {
+      const isNoShow = !mockMode && data?.status === "NO_SHOW";
+
       if (aptId) {
         await updateAppointment(aptId, data, mockMode);
+
+        // ✅ NEW: trigger email after NO_SHOW
+        if (isNoShow) {
+          await triggerNoShowEmail(referralId, mockMode);
+        }
+
         if (data.status === "NO_SHOW") {
           toast.success("Marked NO_SHOW — Reschedule task created for nurse");
         } else {
           toast.success("Appointment updated");
         }
       } else {
-        await createAppointment(referralId, data, mockMode, { specialistName: user?.full_name });
+        await createAppointment(referralId, data, mockMode, {
+          specialistName: user?.full_name,
+        });
+
         toast.success("Appointment added");
       }
+
       setSheetOpen(false);
       setSelectedRef(null);
       await loadReferrals();

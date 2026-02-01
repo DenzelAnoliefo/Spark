@@ -27,7 +27,12 @@ import {
   loadDemoDataSupabase,
 } from "./supabaseQueries";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+const API_BASE_RAW =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:3000";
+
+const API_BASE = API_BASE_RAW.replace(/\/$/, "");
 
 async function fetchWithAuth(path, options = {}) {
   // 1. Get the current active session from Supabase
@@ -337,6 +342,14 @@ export async function getNotifications(scope = "mine", useMock, userId) {
 export function getClinics(useMock) {
   if (useMock) return Promise.resolve(mockClinics);
   return fetchWithAuth("/clinics");
+}
+
+export async function triggerNoShowEmail(referralId, useMock) {
+  if (useMock) return Promise.resolve({ ok: true });
+
+  return fetchWithAuth(`/referrals/${referralId}/no-show-email`, {
+    method: "POST",
+  });
 }
 
 export async function createPatient(data, useMock) {

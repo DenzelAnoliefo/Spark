@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
-import { getReferral, createAppointment, updateAppointment, rescheduleAppointment } from "@/lib/api";
+import { getReferral, createAppointment, updateAppointment, rescheduleAppointment, triggerNoShowEmail } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -32,20 +32,31 @@ export default function SpecialistReferralDetailPage() {
     getReferral(params.id, mockMode).then(setReferral).catch(() => setReferral(null));
 
   const handleAppointmentUpdate = async (referralId, aptId, data) => {
+    const isNoShow = !mockMode && data?.status === "NO_SHOW";
+
     if (aptId) {
       await updateAppointment(aptId, data, mockMode);
+
+      if (isNoShow) {
+        await triggerNoShowEmail(referralId, mockMode);
+      }
     } else {
-      const apt = await createAppointment(referralId, data, mockMode, { specialistName: user?.full_name });
+      const apt = await createAppointment(referralId, data, mockMode, {
+        specialistName: user?.full_name,
+      });
+
+      // ✅ NEW: if they created an appointment that is already NO_SHOW
+      if (isNoShow) {
+        await triggerNoShowEmail(referralId, mockMode);
+      }
+
       setReferral((r) =>
         r
-          ? {
-              ...r,
-              appointments: [...(r.appointments || []), apt],
-              status: "BOOKED",
-            }
+          ? { ...r, appointments: [...(r.appointments || []), apt], status: "BOOKED" }
           : null
       );
     }
+
     setSheetOpen(false);
   };
 
