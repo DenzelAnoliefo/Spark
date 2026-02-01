@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
-import { getReferrals, createAppointment, updateAppointment } from "@/lib/api";
+import { getReferrals, createAppointment, updateAppointment, rescheduleAppointment } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -50,6 +50,20 @@ export default function SpecialistPage() {
       await loadReferrals();
     } catch (err) {
       toast.error(err.message || "Failed to update");
+    }
+  };
+
+  const handleReschedule = async (referralId, appointmentId, data) => {
+    try {
+      await rescheduleAppointment(referralId, appointmentId, data, mockMode, {
+        specialistName: user?.full_name,
+      });
+      toast.success("Appointment rescheduled");
+      setSheetOpen(false);
+      setSelectedRef(null);
+      await loadReferrals();
+    } catch (err) {
+      toast.error(err.message || "Failed to reschedule");
     }
   };
 
@@ -141,6 +155,7 @@ export default function SpecialistPage() {
         onOpenChange={setSheetOpen}
         referral={selectedRef}
         onSuccess={handleAppointmentUpdate}
+        onReschedule={handleReschedule}
         mockMode={mockMode}
       />
     </div>

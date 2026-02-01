@@ -6,8 +6,6 @@ import { useAuth } from "@/contexts/auth-context";
 import {
   getReferrals,
   getTasks,
-  getClinics,
-  updateTask,
   loadDemoData,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -20,47 +18,35 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { PriorityBadge } from "@/components/shared/priority-badge";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
-import { Plus, FileText, AlertTriangle, Database } from "lucide-react";
+import { Plus, FileText, AlertTriangle, Database, UserPlus } from "lucide-react";
 import { toast } from "sonner";
-import { REFERRAL_STATUSES, SPECIALTIES } from "@/lib/mockData";
+
+const RECENT_REFERRALS_LIMIT = 20;
 
 export default function NurseDashboard() {
-  const { mockMode } = useAuth();
+  const { mockMode, user } = useAuth();
   const [referrals, setReferrals] = useState([]);
+  const [recentReferrals, setRecentReferrals] = useState([]);
   const [tasks, setTasks] = useState([]);
-  const [clinics, setClinics] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    status: "all",
-    priority: "all",
-    specialty: "all",
-    atRisk: false,
-  });
-  const [clinic, setClinic] = useState("");
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [refs, t, c] = await Promise.all([
+      const [refs, t] = await Promise.all([
         getReferrals("all", mockMode),
         getTasks("open", mockMode),
-        getClinics(mockMode),
       ]);
-      setReferrals(refs);
-      setTasks(t);
-      setClinics(c);
-      if (c?.length && !clinic) setClinic(c[0]?.id || "");
+      setReferrals(refs || []);
+      const byNurse =
+        user?.role === "nurse" && user?.id
+          ? (refs || []).filter((r) => r.created_by === user.id)
+          : refs || [];
+      setRecentReferrals(byNurse.slice(0, RECENT_REFERRALS_LIMIT));
+      setTasks(t || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -70,13 +56,14 @@ export default function NurseDashboard() {
 
   useEffect(() => {
     loadData();
-  }, [mockMode]);
+  }, [mockMode, user?.id, user?.role]);
 
   const handleMarkTaskDone = async (taskId) => {
     try {
+      const { updateTask, getTasks } = await import("@/lib/api");
       await updateTask(taskId, { status: "DONE" }, mockMode);
       const t = await getTasks("open", mockMode);
-      setTasks(t);
+      setTasks(t || []);
     } catch (err) {
       console.error(err);
     }
@@ -92,30 +79,6 @@ export default function NurseDashboard() {
     }
   };
 
-  const filtered = referrals.filter((r) => {
-    if (filters.status !== "all" && r.status !== filters.status) return false;
-    if (filters.priority !== "all" && r.priority !== filters.priority) return false;
-    if (filters.specialty !== "all" && r.specialty !== filters.specialty) return false;
-    if (filters.atRisk) {
-      const overdue = r.due_date && new Date(r.due_date) < new Date();
-      const needsReschedule = r.status === "NEEDS_RESCHEDULE" || r.status === "NO_SHOW";
-      if (!overdue && !needsReschedule) return false;
-    }
-    return true;
-  });
-
-  const kpis = {
-    totalOpen: referrals.filter((r) => !["CLOSED", "ATTENDED"].includes(r.status)).length,
-    needsReschedule: referrals.filter((r) => r.status === "NEEDS_RESCHEDULE").length,
-    highPriority: referrals.filter((r) => r.priority === "High").length,
-    upcoming: referrals.filter((r) => {
-      const apt = r.appointments?.[0];
-      if (!apt) return false;
-      const d = new Date(apt.scheduled_for);
-      return d > new Date() && ["BOOKED", "CONFIRMED"].includes(r.status);
-    }).length,
-  };
-
   if (loading) {
     return (
       <div className="flex justify-center py-16">
@@ -126,255 +89,146 @@ export default function NurseDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Referral Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Manage and track all referrals</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {clinics?.length > 0 && (
-            <Select value={clinic} onValueChange={setClinic}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Clinic" />
-              </SelectTrigger>
-              <SelectContent>
-                {clinics.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {!mockMode && (
-            <Button variant="outline" size="sm" onClick={handleLoadDemoData}>
-              <Database className="h-4 w-4 mr-2" />
-              Load demo data
-            </Button>
-          )}
-          <Link href="/nurse/referrals/new">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Referral
-            </Button>
-          </Link>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Nurse Dashboard</h1>
+        <p className="text-muted-foreground mt-1">
+          Create referrals and manage tasks
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Open
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{kpis.totalOpen}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Needs Reschedule
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-amber-600">{kpis.needsReschedule}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              High Priority
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-red-600">{kpis.highPriority}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Upcoming Appointments
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-green-600">{kpis.upcoming}</p>
-          </CardContent>
-        </Card>
+      {/* Top actions */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Link href="/nurse/referrals/new">
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Referral
+          </Button>
+        </Link>
+        <Link href="/nurse/referrals/new">
+          <Button variant="outline">
+            <UserPlus className="h-4 w-4 mr-2" />
+            Add Patient
+          </Button>
+        </Link>
+        {!mockMode && (
+          <Button variant="outline" size="sm" onClick={handleLoadDemoData}>
+            <Database className="h-4 w-4 mr-2" />
+            Load demo data
+          </Button>
+        )}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <CardTitle>Referrals</CardTitle>
-                <div className="flex flex-wrap gap-2">
-                  <Select
-                    value={filters.status}
-                    onValueChange={(v) => setFilters((f) => ({ ...f, status: v }))}
-                  >
-                    <SelectTrigger className="w-[130px]">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All status</SelectItem>
-                      {REFERRAL_STATUSES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s.replace(/_/g, " ")}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={filters.priority}
-                    onValueChange={(v) => setFilters((f) => ({ ...f, priority: v }))}
-                  >
-                    <SelectTrigger className="w-[120px]">
-                      <SelectValue placeholder="Priority" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All priority</SelectItem>
-                      <SelectItem value="High">High</SelectItem>
-                      <SelectItem value="Medium">Medium</SelectItem>
-                      <SelectItem value="Low">Low</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={filters.specialty}
-                    onValueChange={(v) => setFilters((f) => ({ ...f, specialty: v }))}
-                  >
-                    <SelectTrigger className="w-[140px]">
-                      <SelectValue placeholder="Specialty" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All specialty</SelectItem>
-                      {SPECIALTIES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={filters.atRisk}
-                      onChange={(e) =>
-                        setFilters((f) => ({ ...f, atRisk: e.target.checked }))
-                      }
-                    />
-                    At risk
-                  </label>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {filtered.length === 0 ? (
-                <EmptyState
-                  title="No referrals"
-                  description="Create a referral to get started."
-                  action={
-                    <Link href="/nurse/referrals/new">
-                      <Button>Create Referral</Button>
-                    </Link>
-                  }
-                />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Patient</TableHead>
-                      <TableHead>Specialty</TableHead>
-                      <TableHead>Priority</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Due</TableHead>
-                      <TableHead>History</TableHead>
-                      <TableHead></TableHead>
+      {/* Recent Referrals Created */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Referrals Created</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {user?.role === "nurse" && user?.id
+              ? "Referrals you created (acting as current nurse)"
+              : "All referrals (select a nurse to filter)"}
+          </p>
+        </CardHeader>
+        <CardContent>
+          {recentReferrals.length === 0 ? (
+            <EmptyState
+              title="No referrals yet"
+              description="Create a referral to see it here."
+              action={
+                <Link href="/nurse/referrals/new">
+                  <Button>Create Referral</Button>
+                </Link>
+              }
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Specialty</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Assigned Specialist</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentReferrals.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium">
+                        {r.patient_name}
+                      </TableCell>
+                      <TableCell>{r.specialty}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={r.status} />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {r.specialist_name ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {r.created_at
+                          ? new Date(r.created_at).toLocaleDateString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Link href={`/nurse/referrals/${r.id}`}>
+                          <Button variant="ghost" size="sm">
+                            <FileText className="h-4 w-4 mr-1" />
+                            Open
+                          </Button>
+                        </Link>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map((r) => {
-                      const preview = (r.timelinePreview || []).slice(0, 3);
-                      return (
-                        <TableRow key={r.id}>
-                          <TableCell className="font-medium">{r.patient_name}</TableCell>
-                          <TableCell>{r.specialty}</TableCell>
-                          <TableCell>
-                            <PriorityBadge priority={r.priority} />
-                          </TableCell>
-                          <TableCell>
-                            <StatusBadge status={r.status} />
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {r.due_date ? new Date(r.due_date).toLocaleDateString() : "—"}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[180px]">
-                            {preview.length === 0 ? (
-                              "—"
-                            ) : (
-                              <ul className="space-y-0.5">
-                                {preview.map((e) => (
-                                  <li key={e.id} title={e.description || e.type}>
-                                    {new Date(e.timestamp).toLocaleDateString()} — {e.type?.replace(/_/g, " ")}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Link href={`/nurse/referrals/${r.id}`}>
-                              <Button variant="ghost" size="sm">
-                                <FileText className="h-4 w-4" />
-                              </Button>
-                            </Link>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" />
-              Open Tasks
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {tasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No open tasks</p>
-            ) : (
-              <ul className="space-y-3">
-                {tasks.map((t) => (
-                  <li key={t.id} className="border-b pb-3 last:border-0 flex items-start justify-between gap-2">
-                    <Link href={`/nurse/referrals/${t.referral_id}`} className="block flex-1 min-w-0">
-                      <p className="font-medium text-sm">{t.patient_name}</p>
-                      <p className="text-xs text-muted-foreground">{t.specialty} — {t.type}</p>
-                      <p className="text-xs text-amber-600 mt-1">
-                        Due {t.due_at ? new Date(t.due_at).toLocaleDateString() : "—"}
-                      </p>
-                    </Link>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => handleMarkTaskDone(t.id)}
-                    >
-                      Mark done
-                    </Button>
-                  </li>
                 ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Open Tasks */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Open Tasks
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {tasks.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No open tasks</p>
+          ) : (
+            <ul className="space-y-3">
+              {tasks.map((t) => (
+                <li
+                  key={t.id}
+                  className="border-b pb-3 last:border-0 flex items-start justify-between gap-2"
+                >
+                  <Link
+                    href={`/nurse/referrals/${t.referral_id}`}
+                    className="block flex-1 min-w-0"
+                  >
+                    <p className="font-medium text-sm">{t.patient_name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t.specialty} — {t.type}
+                    </p>
+                    <p className="text-xs text-amber-600 mt-1">
+                      Due{" "}
+                      {t.due_at ? new Date(t.due_at).toLocaleDateString() : "—"}
+                    </p>
+                  </Link>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleMarkTaskDone(t.id)}
+                  >
+                    Mark done
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
