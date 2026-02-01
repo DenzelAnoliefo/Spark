@@ -11,7 +11,7 @@ import {
 
 import { supabase } from "./supabase"; // Import your initialized client
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function fetchWithAuth(path, options = {}) {
   // 1. Get the current active session from Supabase
@@ -120,11 +120,32 @@ export async function createReferral(data, useMock) {
 export async function updateReferralStatus(id, status, useMock) {
   if (useMock) {
     const ref = mockReferrals.find((r) => r.id === id);
-    if (!ref) return Promise.reject(new Error("Not found"));
+    if (!ref) throw new Error("Not found");
+
+    // Update mock data (UI stays instant)
     ref.status = status;
     ref.updated_at = new Date().toISOString();
+
+    // 🔔 Trigger backend email ONLY for testing
+    if (status === "NO_SHOW") {
+      fetch(`${API_BASE}/test/no-show-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_name: ref.patient_name,
+          ref_id: ref.id,
+          specialty: ref.specialty,
+          status,
+        }),
+      }).catch((err) => {
+        console.warn("Mock email trigger failed:", err);
+      });
+    }
+
     return Promise.resolve(ref);
   }
+
+  // Real backend path (non-mock)
   return fetchWithAuth(`/referrals/${id}/status`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
