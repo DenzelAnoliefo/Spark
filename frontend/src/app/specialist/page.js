@@ -42,7 +42,7 @@ export default function SpecialistPage() {
           toast.success("Appointment updated");
         }
       } else {
-        await createAppointment(referralId, data, mockMode);
+        await createAppointment(referralId, data, mockMode, { specialistName: user?.full_name });
         toast.success("Appointment added");
       }
       setSheetOpen(false);

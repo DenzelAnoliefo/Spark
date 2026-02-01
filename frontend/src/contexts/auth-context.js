@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { getMe } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+import { DEMO_NURSES, SPECIALIST_BY_SPECIALTY, SPECIALTIES } from "@/lib/mockData";
 
 const AuthContext = createContext(null);
 
@@ -12,21 +13,40 @@ export const DEMO_SPECIALIST_ID = "00000000-0000-0000-0000-000000000002";
 
 const STORAGE_SELECTED_PATIENT_ID = "selectedPatientId";
 const STORAGE_SELECTED_PATIENT_NAME = "selectedPatientName";
+const STORAGE_SELECTED_NURSE_ID = "selectedNurseId";
+const STORAGE_SELECTED_NURSE_NAME = "selectedNurseName";
+const STORAGE_SELECTED_SPECIALIST_KEY = "selectedSpecialistKey";
+const STORAGE_SELECTED_SPECIALIST_NAME = "selectedSpecialistName";
+const STORAGE_SELECTED_SPECIALIST_SPECIALTY = "selectedSpecialistSpecialty";
 
 function getDemoUser(role) {
-  if (role === "nurse") {
+  if (typeof window === "undefined") {
     return { id: DEMO_NURSE_ID, role: "nurse", full_name: "Demo Nurse" };
   }
+  if (role === "nurse") {
+    const id = localStorage.getItem(STORAGE_SELECTED_NURSE_ID);
+    const full_name = localStorage.getItem(STORAGE_SELECTED_NURSE_NAME);
+    return {
+      id: id || DEMO_NURSES[0]?.id || DEMO_NURSE_ID,
+      role: "nurse",
+      full_name: full_name || DEMO_NURSES[0]?.name || "Demo Nurse",
+    };
+  }
   if (role === "specialist") {
-    return { id: DEMO_SPECIALIST_ID, role: "specialist", full_name: "Demo Specialist" };
+    const key = localStorage.getItem(STORAGE_SELECTED_SPECIALIST_KEY);
+    const name = localStorage.getItem(STORAGE_SELECTED_SPECIALIST_NAME);
+    const specialty = localStorage.getItem(STORAGE_SELECTED_SPECIALIST_SPECIALTY);
+    const firstSpecialty = SPECIALTIES[0];
+    return {
+      id: key || firstSpecialty,
+      role: "specialist",
+      full_name: name || (firstSpecialty && SPECIALIST_BY_SPECIALTY[firstSpecialty]) || "Demo Specialist",
+      specialty: specialty || firstSpecialty,
+    };
   }
   if (role === "patient") {
-    const id =
-      typeof window !== "undefined" ? localStorage.getItem(STORAGE_SELECTED_PATIENT_ID) : null;
-    const full_name =
-      typeof window !== "undefined"
-        ? localStorage.getItem(STORAGE_SELECTED_PATIENT_NAME) || "Select patient"
-        : "Select patient";
+    const id = localStorage.getItem(STORAGE_SELECTED_PATIENT_ID);
+    const full_name = localStorage.getItem(STORAGE_SELECTED_PATIENT_NAME) || "Select patient";
     return { id: id || null, role: "patient", full_name };
   }
   return { id: DEMO_NURSE_ID, role: "nurse", full_name: "Demo Nurse" };
@@ -126,6 +146,16 @@ export function AuthProvider({ children }) {
         const names = { nurse: "Nurse Smith", patient: "Maria Garcia", specialist: "Dr. Johnson" };
         setUser({ id: role, role, full_name: names[role] });
       } else {
+        if (role === "nurse" && !localStorage.getItem(STORAGE_SELECTED_NURSE_ID) && DEMO_NURSES[0]) {
+          localStorage.setItem(STORAGE_SELECTED_NURSE_ID, DEMO_NURSES[0].id);
+          localStorage.setItem(STORAGE_SELECTED_NURSE_NAME, DEMO_NURSES[0].name);
+        }
+        if (role === "specialist" && !localStorage.getItem(STORAGE_SELECTED_SPECIALIST_KEY) && SPECIALTIES[0]) {
+          const spec = SPECIALTIES[0];
+          localStorage.setItem(STORAGE_SELECTED_SPECIALIST_KEY, spec);
+          localStorage.setItem(STORAGE_SELECTED_SPECIALIST_NAME, SPECIALIST_BY_SPECIALTY[spec] || "");
+          localStorage.setItem(STORAGE_SELECTED_SPECIALIST_SPECIALTY, spec);
+        }
         setUser(getDemoUser(role));
       }
     }
@@ -147,6 +177,29 @@ export function AuthProvider({ children }) {
           role: "patient",
           full_name: fullName || (patientId ? "Patient" : "Select patient"),
         });
+      }
+    }
+  };
+
+  const setSelectedNurseId = (nurseId, nurseName) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_SELECTED_NURSE_ID, nurseId);
+      localStorage.setItem(STORAGE_SELECTED_NURSE_NAME, nurseName || "");
+      const role = localStorage.getItem("mock_user_role");
+      if (role === "nurse") {
+        setUser(getDemoUser("nurse"));
+      }
+    }
+  };
+
+  const setSelectedSpecialist = (specialtyKey, specialistName, specialty) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_SELECTED_SPECIALIST_KEY, specialtyKey || "");
+      localStorage.setItem(STORAGE_SELECTED_SPECIALIST_NAME, specialistName || "");
+      localStorage.setItem(STORAGE_SELECTED_SPECIALIST_SPECIALTY, specialty || "");
+      const role = localStorage.getItem("mock_user_role");
+      if (role === "specialist") {
+        setUser(getDemoUser("specialist"));
       }
     }
   };
@@ -177,6 +230,8 @@ export function AuthProvider({ children }) {
         signOut,
         setMockRole,
         setSelectedPatientId,
+        setSelectedNurseId,
+        setSelectedSpecialist,
         toggleMockMode,
       }}
     >

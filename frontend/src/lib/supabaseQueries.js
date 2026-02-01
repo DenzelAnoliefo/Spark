@@ -42,18 +42,20 @@ export async function createPatientSupabase(row) {
   return data;
 }
 
-/** Referrals: list with patient name and appointments. scope = 'all' | 'mine'. For mine, pass role + currentUserId (patient_id or for specialist filter by status). */
-export async function getReferralsSupabase(scope, role, currentUserId) {
+/** Referrals: list with patient name and appointments. scope = 'all' | 'mine'. For mine, pass role + currentUserId; for specialist pass specialistKey to filter by assignment. */
+export async function getReferralsSupabase(scope, role, currentUserId, specialistKey) {
   let q = supabase
     .from("referrals")
-    .select("*, patients(full_name), appointments(*)")
+    .select("*, patients(full_name), appointments(*), timeline_events(*))")
     .order("created_at", { ascending: false });
 
   if (scope === "mine" && role === "patient" && currentUserId) {
     q = q.eq("patient_id", currentUserId);
   }
   if (scope === "mine" && role === "specialist") {
-    q = q.in("status", ["SENT", "NEEDS_RESCHEDULE"]);
+    q = q.in("status", ["SENT", "NEEDS_RESCHEDULE", "BOOKED", "CONFIRMED"]);
+    // Filter by assignment when referrals has specialist_specialty column:
+    // if (specialistKey) q = q.eq("specialist_specialty", specialistKey);
   }
 
   const { data, error } = await q;
@@ -61,29 +63,35 @@ export async function getReferralsSupabase(scope, role, currentUserId) {
 
   return (data || []).map((r) => {
     const patientName = Array.isArray(r.patients) ? r.patients[0]?.full_name : r.patients?.full_name;
+    const events = (r.timeline_events || []).sort(
+      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+    );
     return {
       ...r,
       patient_name: patientName ?? "Unknown",
       appointments: (r.appointments || []).sort(
         (a, b) => new Date(a.scheduled_for) - new Date(b.scheduled_for)
       ),
+      timelinePreview: events.slice(0, 3),
     };
   });
 }
 
-/** Referrals: create with status SENT + timeline event */
-export async function createReferralSupabase(row, createdByUserId) {
+/** Referrals: create with status SENT + specialist assignment + timeline event */
+export async function createReferralSupabase(row, createdByUserId, createdByUserName) {
   const refInsert = {
     patient_id: row.patient_id,
     created_by: createdByUserId,
     specialty: row.specialty,
-    priority: row.priority, // 'High' | 'Medium' | 'Low'
+    priority: row.priority,
     status: "SENT",
     notes: row.notes ?? null,
     due_date: row.due_date || null,
     transportation_needed: row.transportation_needed ?? false,
     is_urgent: row.is_urgent ?? false,
   };
+  // Optional: add specialist_key, specialist_name, specialist_specialty to refInsert
+  // and to referrals table if you want assignment filtering
   const { data: ref, error: refErr } = await supabase
     .from("referrals")
     .insert(refInsert)
@@ -91,10 +99,13 @@ export async function createReferralSupabase(row, createdByUserId) {
     .single();
   if (refErr) throw new Error(refErr.message);
 
+  const description = createdByUserName
+    ? `${createdByUserName} created referral`
+    : "Referral sent to specialist";
   await supabase.from("timeline_events").insert({
     referral_id: ref.id,
     type: "REFERRAL_SENT",
-    description: "Referral sent to specialist",
+    description,
     timestamp: new Date().toISOString(),
   });
 
@@ -138,8 +149,8 @@ export async function updateTaskSupabase(taskId, update) {
   return data;
 }
 
-/** Specialist: set appointment — insert appointment, update referral BOOKED, timeline, notification */
-export async function setAppointmentSupabase(referralId, referralPatientId, scheduled_for, location) {
+/** Specialist: set appointment — insert appointment, update referral BOOKED, timeline, notification. specialistName optional for timeline description. */
+export async function setAppointmentSupabase(referralId, referralPatientId, scheduled_for, location, specialistName) {
   const { data: apt, error: aptErr } = await supabase
     .from("appointments")
     .insert({
@@ -158,10 +169,13 @@ export async function setAppointmentSupabase(referralId, referralPatientId, sche
     .eq("id", referralId);
   if (refErr) throw new Error(refErr.message);
 
+  const aptDescription = specialistName
+    ? `${specialistName} booked appointment`
+    : "Appointment scheduled by specialist";
   await supabase.from("timeline_events").insert({
     referral_id: referralId,
     type: "APPOINTMENT_BOOKED",
-    description: "Appointment scheduled by specialist",
+    description: aptDescription,
     timestamp: new Date().toISOString(),
   });
 
@@ -176,7 +190,7 @@ export async function setAppointmentSupabase(referralId, referralPatientId, sche
   return apt;
 }
 
-/** Specialist: mark appointment ATTENDED or NO_SHOW */
+/** Specialist: mark appointment ATTENDED or NO_SHOW. On NO_SHOW: task + timeline + notification (channel=email). */
 export async function updateAppointmentStatusSupabase(appointmentId, referralId, status) {
   const { error: aptErr } = await supabase
     .from("appointments")
@@ -204,11 +218,18 @@ export async function updateAppointmentStatusSupabase(appointmentId, referralId,
       timestamp: new Date().toISOString(),
     });
     if (ref?.patient_id) {
+      const { data: patient } = await supabase
+        .from("patients")
+        .select("full_name, email")
+        .eq("id", ref.patient_id)
+        .single();
+      const patientName = patient?.full_name || "Patient";
+      const message = `${patientName} — Please request a reschedule.`;
       await supabase.from("notifications").insert({
         user_id: ref.patient_id,
         type: "NO_SHOW",
-        channel: "in_app",
-        message: "You were marked as no-show. Please request a reschedule.",
+        channel: "email",
+        message,
         is_read: false,
       });
     }

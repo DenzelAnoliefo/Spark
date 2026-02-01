@@ -15,7 +15,7 @@ import { SpecialistAppointmentSheet } from "@/components/specialist/appointment-
 
 export default function SpecialistReferralDetailPage() {
   const params = useParams();
-  const { mockMode } = useAuth();
+  const { mockMode, user } = useAuth();
   const [referral, setReferral] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -28,7 +28,7 @@ export default function SpecialistReferralDetailPage() {
     if (aptId) {
       await updateAppointment(aptId, data, mockMode);
     } else {
-      const apt = await createAppointment(referralId, data, mockMode);
+      const apt = await createAppointment(referralId, data, mockMode, { specialistName: user?.full_name });
       setReferral((r) =>
         r
           ? {
@@ -62,6 +62,7 @@ export default function SpecialistReferralDetailPage() {
   }
 
   const appointments = referral.appointments || [];
+  const timeline = referral.timeline || [];
 
   return (
     <div className="space-y-6">
@@ -101,6 +102,28 @@ export default function SpecialistReferralDetailPage() {
                   </p>
                   <p className="text-sm text-muted-foreground">{apt.location}</p>
                   <StatusBadge status={apt.status} className="mt-2" />
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {timeline.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No events yet</p>
+          ) : (
+            <ul className="space-y-3">
+              {[...timeline].reverse().slice(0, 10).map((e) => (
+                <li key={e.id} className="flex gap-3 text-sm">
+                  <span className="text-muted-foreground shrink-0">
+                    {new Date(e.timestamp).toLocaleString()}
+                  </span>
+                  <span>{e.description || e.type}</span>
                 </li>
               ))}
             </ul>
