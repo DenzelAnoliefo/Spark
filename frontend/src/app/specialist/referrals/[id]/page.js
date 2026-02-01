@@ -4,13 +4,14 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
-import { getReferral, createAppointment, updateAppointment } from "@/lib/api";
+import { getReferral, createAppointment, updateAppointment, rescheduleAppointment } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PriorityBadge } from "@/components/shared/priority-badge";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { ArrowLeft, Calendar } from "lucide-react";
+import { toast } from "sonner";
 import { SpecialistAppointmentSheet } from "@/components/specialist/appointment-sheet";
 
 export default function SpecialistReferralDetailPage() {
@@ -21,8 +22,14 @@ export default function SpecialistReferralDetailPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
-    getReferral(params.id, mockMode).then(setReferral).catch(() => setReferral(null)).finally(() => setLoading(false));
+    getReferral(params.id, mockMode)
+      .then(setReferral)
+      .catch(() => setReferral(null))
+      .finally(() => setLoading(false));
   }, [params.id, mockMode]);
+
+  const loadReferral = () =>
+    getReferral(params.id, mockMode).then(setReferral).catch(() => setReferral(null));
 
   const handleAppointmentUpdate = async (referralId, aptId, data) => {
     if (aptId) {
@@ -40,6 +47,19 @@ export default function SpecialistReferralDetailPage() {
       );
     }
     setSheetOpen(false);
+  };
+
+  const handleReschedule = async (referralId, appointmentId, data) => {
+    try {
+      await rescheduleAppointment(referralId, appointmentId, data, mockMode, {
+        specialistName: user?.full_name,
+      });
+      toast.success("Appointment rescheduled");
+      setSheetOpen(false);
+      await loadReferral();
+    } catch (err) {
+      toast.error(err?.message ?? "Failed to reschedule");
+    }
   };
 
   if (loading) {
@@ -145,6 +165,7 @@ export default function SpecialistReferralDetailPage() {
         onOpenChange={setSheetOpen}
         referral={referral}
         onSuccess={handleAppointmentUpdate}
+        onReschedule={handleReschedule}
         mockMode={mockMode}
       />
     </div>

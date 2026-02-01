@@ -20,6 +20,7 @@ import {
   updateTaskSupabase,
   setAppointmentSupabase,
   updateAppointmentStatusSupabase,
+  rescheduleAppointmentSupabase,
   confirmAppointmentSupabase,
   requestRescheduleSupabase,
   requestTransportSupabase,
@@ -240,6 +241,33 @@ export async function updateAppointment(appointmentId, data, useMock) {
     data.status
   );
   return { id: appointmentId, ...data };
+}
+
+/** options: { specialistName } for timeline description */
+export async function rescheduleAppointment(referralId, appointmentId, data, useMock, options = {}) {
+  if (useMock) {
+    const ref = mockReferrals.find((r) => r.id === referralId);
+    if (!ref) return Promise.reject(new Error("Referral not found"));
+    const apt = (ref.appointments || []).find((a) => a.id === appointmentId);
+    if (!apt) return Promise.reject(new Error("Appointment not found"));
+    apt.scheduled_for = data.scheduled_for;
+    apt.location = data.location;
+    ref.status = "BOOKED";
+    ref.updated_at = new Date().toISOString();
+    const { mockTasks } = await import("./mockData");
+    mockTasks.forEach((t) => {
+      if (t.referral_id === referralId && t.type === "RESCHEDULE" && t.status === "OPEN") t.status = "DONE";
+    });
+    return Promise.resolve({ ok: true });
+  }
+  await rescheduleAppointmentSupabase({
+    referralId,
+    appointmentId,
+    scheduled_for: data.scheduled_for,
+    location: data.location,
+    specialistName: options.specialistName,
+  });
+  return { ok: true };
 }
 
 export async function requestReschedule(referralId, useMock) {

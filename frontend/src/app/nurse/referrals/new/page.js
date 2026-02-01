@@ -71,7 +71,18 @@ export default function NewReferralPage() {
       toast.success("Referral created successfully");
       router.push("/nurse");
     } catch (err) {
-      toast.error("Failed to create referral");
+      const msg = err?.message ?? "";
+      const isSchemaCache =
+        /schema cache/i.test(msg) ||
+        /could not find the .* column/i.test(msg) ||
+        /column .* of .* in the schema/i.test(msg);
+      if (isSchemaCache) {
+        toast.error(
+          "Supabase schema may be stale. Reload the Supabase API schema (e.g. in Supabase Dashboard) and try again."
+        );
+      } else {
+        toast.error("Failed to create referral");
+      }
       console.error(err);
     } finally {
       setLoading(false);

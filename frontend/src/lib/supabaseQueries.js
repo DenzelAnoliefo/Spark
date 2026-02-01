@@ -54,11 +54,21 @@ export async function getReferralsSupabase(scope, role, currentUserId, specialis
   }
   if (scope === "mine" && role === "specialist") {
     q = q.in("status", ["SENT", "NEEDS_RESCHEDULE", "BOOKED", "CONFIRMED"]);
-    // Filter by assignment when referrals has specialist_specialty column:
-    // if (specialistKey) q = q.eq("specialist_specialty", specialistKey);
+    if (specialistKey) q = q.eq("specialist_specialty", specialistKey);
   }
 
-  const { data, error } = await q;
+  let { data, error } = await q;
+  if (error && /column .* does not exist/i.test(error.message)) {
+    // specialist_specialty (or related) column missing — retry without assignment filter
+    let fallback = supabase
+      .from("referrals")
+      .select("*, patients(full_name), appointments(*), timeline_events(*))")
+      .order("created_at", { ascending: false })
+      .in("status", ["SENT", "NEEDS_RESCHEDULE", "BOOKED", "CONFIRMED"]);
+    const res = await fallback;
+    data = res.data;
+    error = res.error;
+  }
   if (error) throw new Error(error.message);
 
   return (data || []).map((r) => {
@@ -89,9 +99,10 @@ export async function createReferralSupabase(row, createdByUserId, createdByUser
     due_date: row.due_date || null,
     transportation_needed: row.transportation_needed ?? false,
     is_urgent: row.is_urgent ?? false,
+    specialist_key: row.specialist_key ?? null,
+    specialist_name: row.specialist_name ?? null,
+    specialist_specialty: row.specialist_specialty ?? null,
   };
-  // Optional: add specialist_key, specialist_name, specialist_specialty to refInsert
-  // and to referrals table if you want assignment filtering
   const { data: ref, error: refErr } = await supabase
     .from("referrals")
     .insert(refInsert)
@@ -244,6 +255,70 @@ export async function updateAppointmentStatusSupabase(appointmentId, referralId,
       description: "Patient attended appointment",
       timestamp: new Date().toISOString(),
     });
+  }
+
+  return { ok: true };
+}
+
+/** Specialist: reschedule appointment — update existing appointment, referral BOOKED, timeline, notification, close RESCHEDULE tasks */
+export async function rescheduleAppointmentSupabase({
+  referralId,
+  appointmentId,
+  scheduled_for,
+  location,
+  specialistName,
+}) {
+  const { error: aptErr } = await supabase
+    .from("appointments")
+    .update({
+      scheduled_for,
+      location: location ?? "",
+    })
+    .eq("id", appointmentId);
+  if (aptErr) throw new Error(aptErr.message);
+
+  const { error: refErr } = await supabase
+    .from("referrals")
+    .update({ status: "BOOKED", updated_at: new Date().toISOString() })
+    .eq("id", referralId);
+  if (refErr) throw new Error(refErr.message);
+
+  const description = specialistName
+    ? `${specialistName} rescheduled appointment`
+    : "Appointment rescheduled";
+  await supabase.from("timeline_events").insert({
+    referral_id: referralId,
+    type: "APPOINTMENT_RESCHEDULED",
+    description,
+    timestamp: new Date().toISOString(),
+  });
+
+  const { data: refRow } = await supabase
+    .from("referrals")
+    .select("patient_id")
+    .eq("id", referralId)
+    .single();
+  if (refRow?.patient_id) {
+    const when = new Date(scheduled_for).toLocaleString();
+    await supabase.from("notifications").insert({
+      user_id: refRow.patient_id,
+      type: "APPOINTMENT_RESCHEDULED",
+      channel: "email",
+      message: `Your appointment was rescheduled to ${when}.`,
+      is_read: false,
+    });
+  }
+
+  const { data: openTasks } = await supabase
+    .from("tasks")
+    .select("id")
+    .eq("referral_id", referralId)
+    .eq("type", "RESCHEDULE")
+    .eq("status", "OPEN");
+  if (openTasks?.length) {
+    for (const t of openTasks) {
+      await supabase.from("tasks").update({ status: "DONE" }).eq("id", t.id);
+    }
   }
 
   return { ok: true };
