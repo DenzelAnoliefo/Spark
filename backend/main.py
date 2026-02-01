@@ -24,7 +24,11 @@ class Patient(SQLModel, table=True):
     __tablename__ = "patients"
     id: Optional[str] = Field(default=None, primary_key=True)
     full_name: str
-    risk_score: int
+    risk_score: int = 0
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    medical_history: List[str] = Field(default_factory=list, sa_column=Column(JSON))
 
 class Referral(SQLModel, table=True):
     __tablename__ = "referrals"
@@ -151,12 +155,3 @@ def create_patient(patient_data: PatientCreate, session: Session = Depends(get_s
     session.commit()
     session.refresh(new_patient)
     return new_patient
-
-class Patient(SQLModel, table=True):
-    __tablename__ = "patients"
-    id: Optional[str] = Field(default=None, primary_key=True)
-    full_name: str
-    risk_score: int = 0
-    # Add these so you can actually store the data
-    phone: Optional[str] = None
-    medical_history: List[str] = Field(default=[], sa_column=Column(JSON))

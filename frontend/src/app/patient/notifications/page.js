@@ -9,13 +9,13 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Bell } from "lucide-react";
 
 export default function PatientNotificationsPage() {
-  const { mockMode } = useAuth();
+  const { mockMode, user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getNotifications("mine", mockMode).then(setNotifications).finally(() => setLoading(false));
-  }, [mockMode]);
+    getNotifications("mine", mockMode, user?.id).then(setNotifications).finally(() => setLoading(false));
+  }, [mockMode, user?.id]);
 
   if (loading) {
     return (

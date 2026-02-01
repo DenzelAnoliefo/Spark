@@ -9,7 +9,22 @@ import {
   mockClinics,
 } from "./mockData";
 
-import { supabase } from "./supabase"; // Import your initialized client
+import { supabase } from "./supabase";
+import {
+  getCurrentUserId,
+  getPatientsSupabase,
+  createPatientSupabase,
+  getReferralsSupabase,
+  createReferralSupabase,
+  getTasksSupabase,
+  updateTaskSupabase,
+  setAppointmentSupabase,
+  updateAppointmentStatusSupabase,
+  confirmAppointmentSupabase,
+  requestRescheduleSupabase,
+  requestTransportSupabase,
+  loadDemoDataSupabase,
+} from "./supabaseQueries";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -64,10 +79,12 @@ export async function getPatients(useMock) {
     const { mockPatients } = await import("./mockData");
     return Promise.resolve(mockPatients.map((p) => ({ id: p.id, full_name: p.full_name })));
   }
-  return fetchWithAuth("/patients");
+  const list = await getPatientsSupabase();
+  return list.map((p) => ({ id: p.id, full_name: p.full_name }));
 }
 
-export async function getReferrals(scope = "all", useMock) {
+/** context = { role, userId } for scope 'mine' (e.g. from useAuth().user) */
+export async function getReferrals(scope = "all", useMock, context = {}) {
   if (useMock) {
     const role = typeof window !== "undefined" && localStorage.getItem("mock_user_role");
     let refs = [...mockReferrals];
@@ -80,7 +97,11 @@ export async function getReferrals(scope = "all", useMock) {
     }
     return Promise.resolve(refs);
   }
-  return fetchWithAuth(`/referrals?scope=${scope}`);
+  // Real mode + patient + no selected patient → show nothing until they select
+  if (scope === "mine" && context.role === "patient" && !context.userId) {
+    return Promise.resolve([]);
+  }
+  return getReferralsSupabase(scope, context.role, context.userId);
 }
 
 export async function getReferral(id, useMock) {
@@ -90,7 +111,15 @@ export async function getReferral(id, useMock) {
     const timeline = mockTimelineEvents[id] || [];
     return Promise.resolve({ ...ref, timeline });
   }
-  return fetchWithAuth(`/referrals/${id}`);
+  const refs = await getReferralsSupabase("all", null, null);
+  const ref = refs.find((r) => r.id === id);
+  if (!ref) throw new Error("Not found");
+  const { data: events } = await supabase
+    .from("timeline_events")
+    .select("id, type, description, timestamp")
+    .eq("referral_id", id)
+    .order("timestamp", { ascending: true });
+  return { ...ref, timeline: events || [] };
 }
 
 export async function createReferral(data, useMock) {
@@ -114,7 +143,15 @@ export async function createReferral(data, useMock) {
     mockReferrals.push(newRef);
     return Promise.resolve(newRef);
   }
-  return fetchWithAuth("/referrals", { method: "POST", body: JSON.stringify(data) });
+  const createdBy = await getCurrentUserId();
+  const patientName =
+    data.patient_name ??
+    (await getPatientsSupabase()).find((p) => p.id === data.patient_id)?.full_name ??
+    "Unknown";
+  return createReferralSupabase(
+    { ...data, patient_name: patientName },
+    createdBy
+  );
 }
 
 export async function updateReferralStatus(id, status, useMock) {
@@ -148,10 +185,15 @@ export async function createAppointment(referralId, data, useMock) {
     ref.updated_at = new Date().toISOString();
     return Promise.resolve(apt);
   }
-  return fetchWithAuth(`/referrals/${referralId}/appointments`, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+  const refs = await getReferralsSupabase("all", null, null);
+  const ref = refs.find((r) => r.id === referralId);
+  if (!ref) throw new Error("Referral not found");
+  return setAppointmentSupabase(
+    referralId,
+    ref.patient_id,
+    data.scheduled_for,
+    data.location
+  );
 }
 
 export async function updateAppointment(appointmentId, data, useMock) {
@@ -180,10 +222,18 @@ export async function updateAppointment(appointmentId, data, useMock) {
     }
     return Promise.reject(new Error("Appointment not found"));
   }
-  return fetchWithAuth(`/appointments/${appointmentId}`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
+  const { data: apt } = await supabase
+    .from("appointments")
+    .select("referral_id")
+    .eq("id", appointmentId)
+    .single();
+  if (!apt?.referral_id) throw new Error("Appointment not found");
+  await updateAppointmentStatusSupabase(
+    appointmentId,
+    apt.referral_id,
+    data.status
+  );
+  return { id: appointmentId, ...data };
 }
 
 export async function requestReschedule(referralId, useMock) {
@@ -205,16 +255,14 @@ export async function requestReschedule(referralId, useMock) {
     });
     return Promise.resolve({ success: true });
   }
-  return fetchWithAuth(`/referrals/${referralId}/reschedule-request`, {
-    method: "POST",
-  });
+  return requestRescheduleSupabase(referralId);
 }
 
 export async function getTasks(status = "open", useMock) {
   if (useMock) {
     return Promise.resolve(mockTasks.filter((t) => t.status.toUpperCase() === status.toUpperCase()));
   }
-  return fetchWithAuth(`/tasks?status=${status}`);
+  return getTasksSupabase(status);
 }
 
 export async function updateTask(taskId, data, useMock) {
@@ -224,20 +272,32 @@ export async function updateTask(taskId, data, useMock) {
     task.status = data.status || "DONE";
     return Promise.resolve(task);
   }
-  return fetchWithAuth(`/tasks/${taskId}`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
+  return updateTaskSupabase(taskId, { status: data.status ?? "DONE" });
 }
 
-export async function getNotifications(scope = "mine", useMock) {
+/** userId optional: for demo mode pass selectedPatientId / demo user id when no session */
+export async function getNotifications(scope = "mine", useMock, userId) {
   if (useMock) {
     const role = typeof window !== "undefined" && localStorage.getItem("mock_user_role");
     const me = getMockMe(role || "nurse");
     const filtered = mockNotifications.filter((n) => n.user_id === me.id);
     return Promise.resolve(filtered);
   }
-  return fetchWithAuth(`/notifications?scope=${scope}`);
+  let uid = userId;
+  if (uid == null) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    uid = session?.user?.id;
+  }
+  if (!uid) return [];
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("user_id", uid)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
 export function getClinics(useMock) {
@@ -247,8 +307,29 @@ export function getClinics(useMock) {
 
 export async function createPatient(data, useMock) {
   if (useMock) {
-    // Hackathon Logic: Just pretend it worked
     return Promise.resolve({ id: `p-${Date.now()}`, full_name: data.full_name });
   }
-  return fetchWithAuth("/patients", { method: "POST", body: JSON.stringify(data) });
+  return createPatientSupabase(data);
+}
+
+/** Patient: confirm appointment (Supabase only when !useMock) */
+export async function confirmAppointment(referralId, appointmentId, patientId, useMock) {
+  if (useMock) {
+    return Promise.resolve({ ok: true });
+  }
+  return confirmAppointmentSupabase(referralId, appointmentId, patientId);
+}
+
+/** Patient: request transportation (Supabase only when !useMock) */
+export async function requestTransport(referralId, useMock) {
+  if (useMock) {
+    return Promise.resolve({ ok: true });
+  }
+  return requestTransportSupabase(referralId);
+}
+
+/** Dev-only: load 2 patients + 2 referrals if tables empty (Supabase only) */
+export async function loadDemoData(useMock) {
+  if (useMock) return Promise.resolve({ ok: true });
+  return loadDemoDataSupabase();
 }

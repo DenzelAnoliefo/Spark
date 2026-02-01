@@ -2,9 +2,23 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
-import { getReferrals, requestReschedule } from "@/lib/api";
+import {
+  getReferrals,
+  getPatients,
+  requestReschedule,
+  confirmAppointment,
+  requestTransport,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -60,16 +74,35 @@ function iconForCode(code, daytime = true) {
 }
 
 export default function PatientPage() {
-  const { mockMode, user } = useAuth();
+  const { mockMode, user, setSelectedPatientId } = useAuth();
   const [referrals, setReferrals] = useState([]);
+  const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState(null);
   const [hourlyByDate, setHourlyByDate] = useState({});
   const [dailyMeta, setDailyMeta] = useState([]);
 
+  const patientId = user?.id;
+
+  const loadReferrals = () =>
+    getReferrals("mine", mockMode, { role: user?.role, userId: patientId }).then(setReferrals);
+
   useEffect(() => {
-    getReferrals("mine", mockMode).then(setReferrals).finally(() => setLoading(false));
+    loadReferrals().finally(() => setLoading(false));
+  }, [mockMode, user?.id, user?.role]);
+
+  // Real mode: fetch patients for selector
+  useEffect(() => {
+    if (!mockMode) {
+      getPatients(false).then(setPatients).catch(() => setPatients([]));
+    }
   }, [mockMode]);
+
+  const handlePatientSelect = (selectedId) => {
+    const patient = patients.find((p) => p.id === selectedId);
+    setSelectedPatientId(selectedId, patient?.full_name);
+    loadReferrals();
+  };
 
   useEffect(() => {
     getForecast({ lat: 42.9849, lon: -81.2453 })
@@ -84,12 +117,34 @@ export default function PatientPage() {
     setActionId(referralId);
     try {
       await requestReschedule(referralId, mockMode);
-      setReferrals((refs) =>
-        refs.map((r) =>
-          r.id === referralId ? { ...r, status: "NEEDS_RESCHEDULE" } : r
-        )
-      );
+      await loadReferrals();
       toast.success("Reschedule request sent");
+    } catch (err) {
+      toast.error(err.message || "Failed to send request");
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleConfirmAppointment = async (referralId, appointmentId) => {
+    setActionId(referralId);
+    try {
+      await confirmAppointment(referralId, appointmentId, patientId, mockMode);
+      await loadReferrals();
+      toast.success("Appointment confirmed");
+    } catch (err) {
+      toast.error(err.message || "Failed to confirm");
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleRequestTransport = async (referralId) => {
+    setActionId(referralId);
+    try {
+      await requestTransport(referralId, mockMode);
+      await loadReferrals();
+      toast.success("Transportation request sent");
     } catch (err) {
       toast.error(err.message || "Failed to send request");
     } finally {
@@ -113,6 +168,34 @@ export default function PatientPage() {
           <h1 className="text-2xl font-bold text-slate-900">My Referrals</h1>
           <p className="text-muted-foreground mt-1">Hello, {user?.full_name}</p>
         </div>
+
+        {!mockMode && patients.length > 0 && (
+          <Card>
+            <CardContent className="pt-6">
+              <Label className="text-sm font-medium">View as patient</Label>
+              <Select
+                value={patientId || ""}
+                onValueChange={handlePatientSelect}
+              >
+                <SelectTrigger className="mt-2 max-w-sm">
+                  <SelectValue placeholder="Select a patient..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {patients.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!patientId && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  Select a patient to see their referrals and appointments.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {referrals.length === 0 ? (
           <EmptyState
@@ -175,6 +258,16 @@ export default function PatientPage() {
                             {new Date(apt.scheduled_for).toLocaleString()}
                           </p>
                           <p className="text-sm text-muted-foreground">{apt.location}</p>
+                          {apt.status !== "CONFIRMED" && apt.status !== "ATTENDED" && (
+                            <Button
+                              size="sm"
+                              className="mt-2"
+                              disabled={actionId === ref.id}
+                              onClick={() => handleConfirmAppointment(ref.id, apt.id)}
+                            >
+                              Confirm appointment
+                            </Button>
+                          )}
                         </div>
                       </div>
                     )}
@@ -234,12 +327,18 @@ export default function PatientPage() {
                           ? "Reschedule requested"
                           : "I can't make it / Request reschedule"}
                       </Button>
-                      {ref.transportation_needed && (
-                        <Button size="lg" variant="secondary" className="w-full h-12 text-base">
-                          <Car className="h-5 w-5 mr-2" />
-                          Request transportation
-                        </Button>
-                      )}
+                      <Button
+                        size="lg"
+                        variant="secondary"
+                        className="w-full h-12 text-base"
+                        disabled={actionId === ref.id || ref.transportation_needed}
+                        onClick={() => handleRequestTransport(ref.id)}
+                      >
+                        <Car className="h-5 w-5 mr-2" />
+                        {ref.transportation_needed
+                          ? "Transportation requested"
+                          : "Request transportation"}
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

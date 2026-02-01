@@ -15,18 +15,21 @@ import { toast } from "sonner";
 import { SpecialistAppointmentSheet } from "@/components/specialist/appointment-sheet";
 
 export default function SpecialistPage() {
-  const { mockMode } = useAuth();
+  const { mockMode, user } = useAuth();
   const [referrals, setReferrals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedRef, setSelectedRef] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  const loadReferrals = () =>
+    getReferrals("mine", mockMode, { role: user?.role, userId: user?.id }).then(setReferrals);
+
   useEffect(() => {
-    getReferrals("mine", mockMode).then(setReferrals).finally(() => setLoading(false));
-  }, [mockMode]);
+    loadReferrals().finally(() => setLoading(false));
+  }, [mockMode, user?.id, user?.role]);
 
   const needsBooking = referrals.filter((r) =>
-    ["SENT", "BOOKED", "CONFIRMED"].includes(r.status)
+    ["SENT", "NEEDS_RESCHEDULE", "BOOKED", "CONFIRMED"].includes(r.status)
   );
 
   const handleAppointmentUpdate = async (referralId, aptId, data) => {
@@ -44,7 +47,7 @@ export default function SpecialistPage() {
       }
       setSheetOpen(false);
       setSelectedRef(null);
-      setReferrals(await getReferrals("mine", mockMode));
+      await loadReferrals();
     } catch (err) {
       toast.error(err.message || "Failed to update");
     }

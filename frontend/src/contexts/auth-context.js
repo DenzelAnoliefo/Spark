@@ -3,9 +3,34 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { getMe } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
-import { isOnline } from "@/lib/offline-queue";
 
 const AuthContext = createContext(null);
+
+// Demo identities when mock mode is OFF (no Supabase Auth required)
+export const DEMO_NURSE_ID = "00000000-0000-0000-0000-000000000001";
+export const DEMO_SPECIALIST_ID = "00000000-0000-0000-0000-000000000002";
+
+const STORAGE_SELECTED_PATIENT_ID = "selectedPatientId";
+const STORAGE_SELECTED_PATIENT_NAME = "selectedPatientName";
+
+function getDemoUser(role) {
+  if (role === "nurse") {
+    return { id: DEMO_NURSE_ID, role: "nurse", full_name: "Demo Nurse" };
+  }
+  if (role === "specialist") {
+    return { id: DEMO_SPECIALIST_ID, role: "specialist", full_name: "Demo Specialist" };
+  }
+  if (role === "patient") {
+    const id =
+      typeof window !== "undefined" ? localStorage.getItem(STORAGE_SELECTED_PATIENT_ID) : null;
+    const full_name =
+      typeof window !== "undefined"
+        ? localStorage.getItem(STORAGE_SELECTED_PATIENT_NAME) || "Select patient"
+        : "Select patient";
+    return { id: id || null, role: "patient", full_name };
+  }
+  return { id: DEMO_NURSE_ID, role: "nurse", full_name: "Demo Nurse" };
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -47,20 +72,25 @@ export function AuthProvider({ children }) {
           const me = await getMe(true);
           setUser({ ...me, role });
         } else {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            const me = await getMe(false);
-            setUser(me);
-          } else {
-            setUser(null);
-          }
+          // MVP: no login required — use demo identities from stored role
+          const role =
+            (typeof window !== "undefined" && localStorage.getItem("mock_user_role")) || "nurse";
+          setUser(getDemoUser(role));
         }
       } catch {
         if (mockMode) {
-          const role = typeof window !== "undefined" && localStorage.getItem("mock_user_role") || "nurse";
-          setUser({ id: "mock", role, full_name: role === "nurse" ? "Nurse Smith" : role === "patient" ? "Maria Garcia" : "Dr. Johnson" });
+          const role =
+            (typeof window !== "undefined" && localStorage.getItem("mock_user_role")) || "nurse";
+          setUser({
+            id: "mock",
+            role,
+            full_name:
+              role === "nurse" ? "Nurse Smith" : role === "patient" ? "Maria Garcia" : "Dr. Johnson",
+          });
         } else {
-          setUser(null);
+          const role =
+            (typeof window !== "undefined" && localStorage.getItem("mock_user_role")) || "nurse";
+          setUser(getDemoUser(role));
         }
       } finally {
         setLoading(false);
@@ -92,8 +122,32 @@ export function AuthProvider({ children }) {
   const setMockRole = (role) => {
     if (typeof window !== "undefined") {
       localStorage.setItem("mock_user_role", role);
-      const names = { nurse: "Nurse Smith", patient: "Maria Garcia", specialist: "Dr. Johnson" };
-      setUser({ id: role, role, full_name: names[role] });
+      if (mockMode) {
+        const names = { nurse: "Nurse Smith", patient: "Maria Garcia", specialist: "Dr. Johnson" };
+        setUser({ id: role, role, full_name: names[role] });
+      } else {
+        setUser(getDemoUser(role));
+      }
+    }
+  };
+
+  const setSelectedPatientId = (patientId, fullName) => {
+    if (typeof window !== "undefined") {
+      if (patientId != null) {
+        localStorage.setItem(STORAGE_SELECTED_PATIENT_ID, patientId);
+        localStorage.setItem(STORAGE_SELECTED_PATIENT_NAME, fullName || "Patient");
+      } else {
+        localStorage.removeItem(STORAGE_SELECTED_PATIENT_ID);
+        localStorage.removeItem(STORAGE_SELECTED_PATIENT_NAME);
+      }
+      const role = localStorage.getItem("mock_user_role");
+      if (role === "patient") {
+        setUser({
+          id: patientId || null,
+          role: "patient",
+          full_name: fullName || (patientId ? "Patient" : "Select patient"),
+        });
+      }
     }
   };
 
@@ -102,9 +156,12 @@ export function AuthProvider({ children }) {
     setMockMode(next);
     if (typeof window !== "undefined") {
       localStorage.setItem("mock_mode", String(next));
+      const role = localStorage.getItem("mock_user_role") || "nurse";
       if (next) {
-        const role = localStorage.getItem("mock_user_role") || "nurse";
-        setMockRole(role);
+        const names = { nurse: "Nurse Smith", patient: "Maria Garcia", specialist: "Dr. Johnson" };
+        setUser({ id: role, role, full_name: names[role] });
+      } else {
+        setUser(getDemoUser(role));
       }
     }
   };
@@ -119,6 +176,7 @@ export function AuthProvider({ children }) {
         signIn,
         signOut,
         setMockRole,
+        setSelectedPatientId,
         toggleMockMode,
       }}
     >
