@@ -1,13 +1,44 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select, SQLModel, Field
 from database import get_session, engine 
 from typing import Optional, List
 from datetime import datetime
 from sqlalchemy import Column, JSON
+import resend
+from supabase import create_client
+import os
 
 # 1. Initialize the API App
 app = FastAPI()
+
+# --- Supabase + Email Config (backend-only secrets) ---
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+DATABASE_SERVICE_ROLE_KEY = os.getenv("DATABASE_SERVICE_ROLE_KEY")
+
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+EMAIL_FROM = os.getenv("EMAIL_FROM")              # e.g. onboarding@resend.dev
+EMAIL_TO_TEST = os.getenv("EMAIL_TO_TEST")        # your email for the internal/default notice
+
+if not SUPABASE_URL or not DATABASE_SERVICE_ROLE_KEY:
+    raise RuntimeError("Missing SUPABASE_URL or DATABASE_SERVICE_ROLE_KEY in backend .env")
+
+if not RESEND_API_KEY:
+    raise RuntimeError("Missing RESEND_API_KEY in backend .env")
+
+if not EMAIL_FROM:
+    raise RuntimeError("Missing EMAIL_FROM in backend .env")
+
+supabase_admin = create_client(SUPABASE_URL, DATABASE_SERVICE_ROLE_KEY)
+
+def _send_email(to: str, subject: str, html: str):
+    resend.api_key = RESEND_API_KEY
+    resend.Emails.send({
+        "from": EMAIL_FROM,
+        "to": to,
+        "subject": subject,
+        "html": html,
+    })
 
 # 2. CORS Setup
 app.add_middleware(
@@ -120,6 +151,88 @@ def update_status(ref_id: str, status_update: dict, session: Session = Depends(g
     session.add(referral)
     session.commit()
     return {"ok": True, "status": new_status}
+
+@app.post("/referrals/{ref_id}/no-show-email")
+def trigger_no_show_email(ref_id: str, background_tasks: BackgroundTasks):
+    """
+    Called by the frontend AFTER it marks an appointment as NO_SHOW in Supabase.
+    This endpoint:
+      1) loads the referral from Supabase (to get patient_id + nurse notes)
+      2) loads the patient from Supabase (to get email)
+      3) emails the patient the nurse's message (notes)
+      4) emails EMAIL_TO_TEST a default no-show notice (for testing / internal)
+    """
+
+    # 1) Load referral from Supabase
+    ref_res = (
+        supabase_admin
+        .from_("referrals")
+        .select("id, patient_id, specialty, notes")
+        .eq("id", ref_id)
+        .single()
+        .execute()
+    )
+    ref = ref_res.data
+    if not ref:
+        raise HTTPException(status_code=404, detail="Referral not found in Supabase")
+
+    patient_id = ref.get("patient_id")
+    if not patient_id:
+        raise HTTPException(status_code=400, detail="Referral missing patient_id")
+
+    # 2) Load patient email from Supabase
+    patient_res = (
+        supabase_admin
+        .from_("patients")
+        .select("id, email, full_name")
+        .eq("id", patient_id)
+        .single()
+        .execute()
+    )
+    patient = patient_res.data
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found in Supabase")
+
+    patient_email = patient.get("email")
+    if not patient_email:
+        raise HTTPException(status_code=400, detail="Patient email missing")
+
+    patient_name = patient.get("full_name") or "Patient"
+
+    # 3) Nurse message (stored in referral.notes) + fallback
+    nurse_msg = (ref.get("notes") or "").strip()
+    if not nurse_msg:
+        nurse_msg = "You missed your appointment. Please contact the clinic to reschedule."
+
+    # Patient email
+    subject_patient = "Missed appointment — please reschedule"
+    html_patient = f"""
+    <div style="font-family: Arial, sans-serif;">
+      <p>Hi {patient_name},</p>
+      <p>{nurse_msg}</p>
+      <p>If you believe this is an error, please reply to this email.</p>
+      <p>— Clinic Team</p>
+    </div>
+    """
+
+    # Default/internal notice (to your test inbox)
+    subject_internal = f"NO_SHOW recorded: {patient_name}"
+    html_internal = f"""
+    <div style="font-family: Arial, sans-serif;">
+      <p><b>No-show recorded</b></p>
+      <p>Patient: {patient_name}</p>
+      <p>Referral ID: {ref_id}</p>
+      <p>Specialty: {ref.get("specialty")}</p>
+    </div>
+    """
+
+    # Send async
+    background_tasks.add_task(_send_email, patient_email, subject_patient, html_patient)
+
+    if EMAIL_TO_TEST:
+        background_tasks.add_task(_send_email, EMAIL_TO_TEST, subject_internal, html_internal)
+
+    return {"ok": True}
 
 @app.post("/patients")
 def create_patient(patient_data: PatientCreate, session: Session = Depends(get_session)):
