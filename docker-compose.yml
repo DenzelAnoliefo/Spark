@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  # --- THE BACKEND (FastAPI) ---
+  backend:
+    build: ./backend
+    container_name: spark_backend
+    ports:
+      - "8000:8000"
+    # OPTION A: Load environment variables from a file (Recommended)
+    env_file:
+      - ./backend/.env
+    # OPTION B: Hardcode them here (Easier for quick hackathon demos)
+    # environment:
+    #   - DATABASE_URL=postgresql://postgres:[YOUR_PASSWORD]@pqjbxcsjddsbiseobswc.supabase.co:5432/postgres
+
+  # --- THE FRONTEND (Next.js) ---
+  frontend:
+    build: ./frontend
+    container_name: spark_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # This tells the Frontend where to find the Backend
+      # Since Next.js runs in the browser, "localhost" is correct here
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
