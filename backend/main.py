@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select, SQLModel, Field
 from database import get_session, engine 
@@ -6,8 +6,24 @@ from typing import Optional, List
 from datetime import datetime
 from sqlalchemy import Column, JSON
 
+from dotenv import load_dotenv
+load_dotenv()
+
+from no_show_email import send_no_show_email
+
 # 1. Initialize the API App
 app = FastAPI()
+
+@app.post("/test/no-show-email")
+def test_no_show_email(payload: dict, background_tasks: BackgroundTasks):
+    background_tasks.add_task(
+        send_no_show_email,
+        patient_name=payload.get("patient_name", "Mock Patient"),
+        ref_id=payload.get("ref_id", "mock-id"),
+        specialty=payload.get("specialty"),
+        new_status=payload.get("status", "NO_SHOW"),
+    )
+    return {"ok": True}
 
 # 2. CORS Setup
 app.add_middleware(
@@ -105,22 +121,45 @@ def create_referral(referral_data: ReferralCreate, session: Session = Depends(ge
     return new_ref
 
 @app.patch("/referrals/{ref_id}/status")
-def update_status(ref_id: str, status_update: dict, session: Session = Depends(get_session)):
+def update_status(
+    ref_id: str,
+    status_update: dict,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+):
     referral = session.get(Referral, ref_id)
     if not referral:
         raise HTTPException(status_code=404, detail="Referral not found")
-        
+
+    old_status = referral.status
     new_status = status_update.get("status")
+    if not new_status:
+        raise HTTPException(status_code=400, detail="Missing 'status' in request body")
+
     referral.status = new_status
-    
+
     # SAFETY NET LOGIC
-    if new_status == "NO_SHOW" or new_status == "MISSED":
+    if new_status in ("NO_SHOW", "MISSED"):
         referral.is_urgent = True
-        # Notification logic would go here
-        
+
+        # Only email if we *just transitioned* into a no-show type status
+        if old_status != new_status:
+            # Get patient's name for the email
+            patient = session.get(Patient, referral.patient_id)
+            patient_name = patient.full_name if patient else "Unknown patient"
+
+            # Send in background so the request returns fast
+            background_tasks.add_task(
+                send_no_show_email,
+                patient_name=patient_name,
+                ref_id=ref_id,
+                specialty=referral.specialty,
+                new_status=new_status,
+            )
+
     session.add(referral)
     session.commit()
-    return {"ok": True, "status": new_status}
+    return {"ok": True, "old_status": old_status, "status": new_status}
 
 @app.post("/patients")
 def create_patient(patient_data: PatientCreate, session: Session = Depends(get_session)):
