@@ -1,20 +1,23 @@
-# Use lightweight Python image
+# backend/Dockerfile
 FROM python:3.10-slim
 
-# Set working directory
+# Prevent Python from writing .pyc files and buffer stdout
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
-# Copy requirements first (to cache dependencies)
-COPY requirements.txt .
+# Create a non-root user for security
+RUN addgroup --system app && adduser --system --group app
 
-# Install dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the backend code
 COPY . .
 
-# Expose port 8000
+# Switch to non-root user
+USER app
+
 EXPOSE 8000
 
-# Command to run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

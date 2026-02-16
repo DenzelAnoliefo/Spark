@@ -1,0 +1,8 @@
+# .dockerignore
+node_modules
+__pycache__
+.git
+.env
+.DS_Store
+venv/
+.next/

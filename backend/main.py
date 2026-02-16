@@ -41,9 +41,14 @@ def _send_email(to: str, subject: str, html: str):
     })
 
 # 2. CORS Setup
+origins = [
+    "http://localhost:3000",
+    "https://your-project-name.vercel.app", # You will get this URL from Vercel later
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"], 
+    allow_origins=origins, # OR use ["*"] temporarily if you are lazy/debugging
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
