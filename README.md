@@ -4,7 +4,7 @@ A **closed-loop referrals** MVP for rural and community clinics. The goal: refer
 
 Built for a hackathon-style demo: it runs with **mock data** out of the box and can switch to **real data** (Supabase) without code changes.
 
-Try it out [HERE](https://closed-loop-referrals.vercel.app)!
+Try it out [HERE](https://closed-loop-referrals.vercel.app/login)!
 
 ---
 
