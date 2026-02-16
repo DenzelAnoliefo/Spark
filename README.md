@@ -60,30 +60,6 @@ No real login in the MVP: **demo identities** (acting-as nurse, acting-as specia
 
 ---
 
-## What Works Right Now
-
-### All modes (mock + real)
-
-- **Login:** Role selection (Nurse / Patient / Specialist); no credentials.
-- **Nurse:** Acting-as dropdown (e.g. Nurse Avery Chen / Nurse Jordan Patel); create patient (with email) and referral (with specialty and assigned specialist); “Recent Referrals Created” filtered by acting nurse; open tasks list and “Mark done”; referral detail with timeline and appointments.
-- **Specialist:** Acting-as dropdown by specialty (e.g. Dr. Maya Singh – Dermatology); list of referrals assigned to that specialty (SENT / NEEDS_RESCHEDULE / BOOKED / CONFIRMED); book appointment; **reschedule** (new date/time + location); Mark ATTENDED / NO_SHOW; referral detail with history.
-- **Patient:** Patient selector (real mode); list of referrals; confirm appointment; request reschedule; request transportation; history per referral; weather widget on patient dashboard.
-
-### Real mode only (Supabase)
-
-- Patients, referrals, appointments, tasks, notifications, and timeline events are persisted in Supabase.
-- Referrals: `created_by`, `specialist_key` / `specialist_name` / `specialist_specialty` (if columns exist).
-- Timeline events: REFERRAL_SENT, APPOINTMENT_BOOKED, APPOINTMENT_RESCHEDULED, PATIENT_CONFIRMED, RESCHEDULE_REQUESTED, TRANSPORT_REQUESTED, NO_SHOW, ATTENDED.
-- No-show: referral → NEEDS_RESCHEDULE, reschedule task created, NO_SHOW timeline event, notification row (type NO_SHOW, channel email) for the patient.
-- Reschedule: existing appointment updated; referral → BOOKED; APPOINTMENT_RESCHEDULED timeline + notification; open RESCHEDULE tasks for that referral set to DONE.
-- **Email notifications:** The backend **email notification system is implemented and works** (Resend integration). When notification rows are created (e.g. NO_SHOW, APPOINTMENT_RESCHEDULED), the backend sends the corresponding emails. Run the backend with the right env (Supabase, Resend, etc.) to enable sending.
-
-### Not in scope (yet)
-
-- Supabase Auth and real user accounts.
-
----
-
 ## Project Structure
 
 ```
