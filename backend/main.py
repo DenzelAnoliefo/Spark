@@ -43,7 +43,7 @@ def _send_email(to: str, subject: str, html: str):
 # 2. CORS Setup
 origins = [
     "http://localhost:3000",
-    "https://your-project-name.vercel.app", # You will get this URL from Vercel later
+    "https://closed-loop-referrals.vercel.app", # You will get this URL from Vercel later
 ]
 
 app.add_middleware(
